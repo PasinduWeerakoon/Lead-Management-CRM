@@ -1,0 +1,86 @@
+Notes:
+"This is SAMPLE data for trying the app. All names are fictional and companies are Microsoft example names."
+
+First Name,Last Name,URL,Email Address,Company,Position,Connected On
+Avery,Mockley,,avery.mockley@example.com,Contoso,IT Director,25 Sep 2022
+Jordan,Mockley,,,Wide World Importers,Head of Business Systems,25 Sep 2016
+Priya,Imaginary,,,Tailspin Toys,IT Director,1 Jan 2016
+Marcus,Demo,,,Tailspin Toys,CFO,25 May 2018
+Elena,Mockley,,,Contoso,Chief Information Officer,1 Jan 2016
+Daniel,Placeholder,,,Wide World Importers,Managing Director,1 May 2018
+Sofia,Sample,,,Wide World Importers,Chief Operating Officer,17 Sep 2024
+Kenji,Sample,,,Tailspin Toys,Product Manager,13 Jan 2024
+Grace,Imaginary,,,Contoso,Head of Business Systems,25 May 2018
+Omar,Demo,,omar.demo@example.com,Contoso,Chief Information Officer,21 May 2016
+Hannah,Demo,,,Tailspin Toys,CFO,25 May 2018
+Lucas,Demo,,,Wide World Importers,"Vice President, Digital Transformation",9 Sep 2020
+Maya,Demo,,,Contoso,CFO,13 May 2016
+Ethan,Mockley,,,Contoso,Managing Director,25 Jun 2022
+Leila,Placeholder,,,Contoso,Product Manager,13 May 2022
+Noah,Demo,,,Contoso,Chief Executive Officer,21 May 2022
+Chloe,Sample,,,Wide World Importers,Product Manager,1 Jan 2024
+Ravi,Placeholder,,,Contoso,Head of Business Systems,14 Jan 2020
+Isabel,Mockley,,isabel.mockley@example.com,Tailspin Toys,Power Platform Architect,1 May 2022
+Tom,Mockley,,,Tailspin Toys,"Vice President, Digital Transformation",9 Jan 2022
+Nadia,Placeholder,,,Wide World Importers,Chief Information Officer,9 Sep 2022
+Ben,Placeholder,,,Contoso,Engineering Manager,25 Jan 2020
+Ana,Sample,,,Contoso,"Vice President, Digital Transformation",25 Sep 2016
+Sam,Sample,,,Wide World Importers,Chief Operating Officer,13 May 2022
+Julia,Demo,,,Tailspin Toys,CFO,25 Jan 2016
+Victor,Imaginary,,,Contoso,Chief Operating Officer,25 May 2020
+Zoe,Placeholder,,,Wide World Importers,Chief Information Officer,1 Jan 2020
+Arjun,Mockley,,arjun.mockley@example.com,Wide World Importers,Chief Transformation Officer,25 May 2020
+Clara,Demo,,,Tailspin Toys,Operations Manager,1 Sep 2024
+Felix,Placeholder,,,Tailspin Toys,Chief Operating Officer,17 Jan 2022
+Mina,Imaginary,,,Contoso,Chief Operating Officer,13 Sep 2024
+Owen,Imaginary,,,Contoso,"Vice President, Digital Transformation",13 Sep 2016
+Rosa,Imaginary,,,Wide World Importers,Engineering Manager,5 May 2024
+Theo,Imaginary,,,Wide World Importers,Head of Business Systems,17 Sep 2020
+Ines,Placeholder,,,Wide World Importers,HR Business Partner,17 Sep 2022
+Caleb,Testwell,,,Wide World Importers,Chief Transformation Officer,17 May 2022
+Amara,Placeholder,,amara.placeholder@example.com,Tailspin Toys,Chief Executive Officer,1 May 2018
+Liam,Demo,,,Tailspin Toys,IT Director,1 May 2016
+Yuki,Sample,,,Tailspin Toys,Product Manager,21 Sep 2022
+Diego,Sample,,,Wide World Importers,CFO,1 Jan 2018
+Avery,Demo,,,Tailspin Toys,"Vice President, Digital Transformation",5 Jan 2018
+Jordan,Sample,,,Wide World Importers,Chief Executive Officer,21 Jan 2020
+Priya,Placeholder,,,Wide World Importers,Power Platform Architect,1 Jan 2024
+Marcus,Mockley,,,Tailspin Toys,IT Director,1 Sep 2020
+Elena,Placeholder,,,Wide World Importers,Power Platform Architect,1 Sep 2022
+Daniel,Imaginary,,daniel.imaginary@example.com,Contoso,"Vice President, Digital Transformation",9 May 2020
+Sofia,Placeholder,,,Contoso,Managing Director,1 May 2022
+Kenji,Mockley,,,Wide World Importers,Head of Business Systems,17 May 2016
+Grace,Placeholder,,,Tailspin Toys,Chief Executive Officer,5 May 2020
+Omar,Sample,,,Tailspin Toys,HR Business Partner,5 Sep 2022
+Hannah,Imaginary,,,Tailspin Toys,Chief Transformation Officer,21 May 2020
+Lucas,Imaginary,,,Contoso,Power Platform Architect,9 May 2022
+Maya,Mockley,,,Tailspin Toys,Operations Manager,9 Sep 2016
+Ethan,Imaginary,,,Tailspin Toys,Chief Information Officer,25 Jan 2022
+Leila,Placeholder,,leila.placeholder@example.com,Tailspin Toys,"Director, Microsoft Dynamics 365 Practice",1 Jan 2020
+Noah,Placeholder,,,Wide World Importers,"Director, Microsoft Dynamics 365 Practice",1 May 2024
+Chloe,Sample,,,Wide World Importers,"Director, Microsoft Dynamics 365 Practice",25 Sep 2018
+Ravi,Sample,,,Contoso,Chief Transformation Officer,25 Sep 2018
+Isabel,Placeholder,,,Tailspin Toys,IT Director,9 May 2024
+Tom,Mockley,,,Tailspin Toys,HR Business Partner,17 May 2016
+Nadia,Mockley,,,Tailspin Toys,"Vice President, Digital Transformation",25 Jan 2016
+Ben,Placeholder,,,Wide World Importers,Head of Business Systems,17 Jan 2018
+Ana,Demo,,,Tailspin Toys,"Director, Microsoft Dynamics 365 Practice",1 Sep 2024
+Sam,Placeholder,,sam.placeholder@example.com,Tailspin Toys,CFO,21 May 2020
+Julia,Mockley,,,Contoso,Chief Transformation Officer,13 Jan 2020
+Victor,Demo,,,Tailspin Toys,Engineering Manager,13 May 2016
+Zoe,Mockley,,,Wide World Importers,Managing Director,9 May 2018
+Arjun,Sample,,,Tailspin Toys,"Vice President, Digital Transformation",21 Jan 2022
+Clara,Mockley,,,Contoso,Head of Business Systems,9 May 2016
+Felix,Demo,,,Fabrikam,Head of Business Systems,13 May 2018
+Mina,Placeholder,,,Contoso,Chief Transformation Officer,13 Sep 2018
+Owen,Placeholder,,,Wide World Importers,Chief Transformation Officer,5 Jan 2022
+Rosa,Demo,,rosa.demo@example.com,Wide World Importers,"Director, Microsoft Dynamics 365 Practice",25 May 2016
+Theo,Sample,,,Tailspin Toys,Operations Manager,9 Sep 2024
+Ines,Mockley,,,Contoso,HR Business Partner,9 May 2024
+Caleb,Demo,,,Tailspin Toys,CFO,21 Sep 2022
+Amara,Sample,,,Tailspin Toys,Engineering Manager,25 Sep 2024
+Liam,Imaginary,,,Wide World Importers,"Director, Microsoft Dynamics 365 Practice",13 May 2020
+Yuki,Sample,,,Tailspin Toys,Chief Information Officer,1 May 2023
+Diego,Mockley,,,Contoso,Product Manager,1 May 2022
+,,,,Contoso,IT Director,03 Mar 2023
+Jordan,Mockley,,,Wide World Importers,Head of Business Systems,25 Sep 2016

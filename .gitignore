@@ -1,0 +1,12 @@
+node_modules
+dist
+.vercel
+*.local
+.DS_Store
+dist-lambda
+infra/cdk.out
+infra/node_modules
+.claude
+*.tsbuildinfo
+company-hq.csv
+.env
