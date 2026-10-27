@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto'
 import { MongoClient, type Db } from 'mongodb'
 
 /**
@@ -51,18 +50,11 @@ export const isHosted = () =>
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production'
 
 /**
- * Optional workspace access code. With APP_ACCESS_KEY set, every request needs it; without it the
- * app is open to anyone with the URL (the company AI key is then protected only by its daily limit).
+ * The app has no login and no access code: every request is allowed. The company AI key is
+ * protected by its daily spending limit. (APP_ACCESS_KEY is ignored if it's still set.)
  */
-export function checkAccess(request: Request): Response | undefined {
-  // Trimmed: a value pasted into Vercel with a stray space or line break still works.
-  const expected = process.env.APP_ACCESS_KEY?.trim()
-  if (!expected) return undefined
-  const given = (request.headers.get('x-app-key') ?? '').trim()
-  const a = Buffer.from(given)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length || !timingSafeEqual(a, b))
-    return json(401, { error: 'Enter the workspace access code.', code: 'access' })
+export function checkAccess(_request: Request): Response | undefined {
+  void _request
   return undefined
 }
 

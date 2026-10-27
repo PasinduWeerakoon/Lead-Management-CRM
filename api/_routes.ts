@@ -73,7 +73,7 @@ export async function handleStatus(request: Request): Promise<Response> {
   if (!denied && companyAiConfigured()) companyAi = await companyAiStatus().catch(() => undefined)
   return json(200, {
     database: databaseConfigured(),
-    accessRequired: !!process.env.APP_ACCESS_KEY?.trim(),
+    accessRequired: false,
     accessOk: !denied,
     // A short fingerprint of the server's code, so a mismatch can be spotted without revealing it.
     accessKeyId: accessKeyId(),

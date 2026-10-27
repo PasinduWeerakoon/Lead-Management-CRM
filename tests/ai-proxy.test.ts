@@ -38,10 +38,9 @@ afterEach(() => {
 })
 
 describe('/api/ai (company key on the server)', () => {
-  it('needs the access code', async () => {
+  it('needs no access code', async () => {
     const f = okFetch()
-    expect((await handleAi(chat(request, 'wrong-code-000'), f)).status).toBe(401)
-    expect(f).not.toHaveBeenCalled()
+    expect((await handleAi(chat(request, ''), f)).status).toBe(200)
   })
 
   it('adds the key on the server, never returns it, and counts the cost', async () => {
@@ -82,19 +81,14 @@ describe('/api/ai (company key on the server)', () => {
     expect(res.status).toBe(429)
   })
 
-  it('reports the company key and today’s spend in the status, but only with the access code', async () => {
+  it('reports the company key and today’s spend in the status, never the key', async () => {
     await store.add(spendDay(), 1.5)
-    const withCode = await handleStatus(
-      new Request('https://app.test/api/status', { headers: { 'x-app-key': 'right-code-123' } }),
-    )
-    const body = (await withCode.json()) as { companyAi?: { spentUsd: number; capUsd: number } }
+    const body = (await (await handleStatus(new Request('https://app.test/api/status'))).json()) as {
+      companyAi?: { spentUsd: number; capUsd: number }
+    }
+    expect(body).toMatchObject({ accessRequired: false, accessOk: true, companyKey: true })
     expect(body.companyAi).toMatchObject({ spentUsd: 1.5, capUsd: 10 })
     expect(JSON.stringify(body)).not.toContain(KEY)
-    const without = (await (await handleStatus(new Request('https://app.test/api/status'))).json()) as object
-    expect(without).not.toHaveProperty('companyAi')
-    // Only whether a key exists is public.
-    expect(without).toMatchObject({ companyKey: true, accessOk: false })
-    expect(JSON.stringify(without)).not.toContain(KEY)
   })
 
   it('says when the server has no company key', async () => {
