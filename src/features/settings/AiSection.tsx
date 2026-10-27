@@ -1,6 +1,6 @@
 import { ApolloKeyForm } from '../enrich/apolloKey'
 import { useEffect, useState } from 'react'
-import { saveAccessCode } from '../../lib/sync/api'
+import { getStatus, saveAccessCode, SyncError, type ServerStatus } from '../../lib/sync/api'
 import { useSync } from '../../lib/sync/store'
 import { PageHeader } from '../../components/PageHeader'
 import {
@@ -73,6 +73,15 @@ export function KeyForm(props: { onSaved?: () => void; onCancel?: () => void }) 
   return <OwnKeyForm {...props} />
 }
 
+/** First 6 hex characters of the code's SHA-256, matching the server's `accessKeyId`. */
+async function fingerprint(code: string): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))
+  return [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 6)
+}
+
 function AccessCodeForm({ onUseOwn, onSaved }: { onUseOwn: () => void; onSaved?: () => void }) {
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -80,12 +89,40 @@ function AccessCodeForm({ onUseOwn, onSaved }: { onUseOwn: () => void; onSaved?:
   const connect = async () => {
     setBusy(true)
     setError(undefined)
-    saveAccessCode(code)
-    await useSync.getState().syncNow()
-    await useAi.getState().refreshCompany()
+    const entered = code.trim()
+    saveAccessCode(entered)
+    let st: ServerStatus | undefined
+    try {
+      st = await getStatus()
+    } catch (e) {
+      // A wrong code comes back as an error too; the status below explains it.
+      if (!(e instanceof SyncError && e.kind === 'access')) {
+        setBusy(false)
+        setError(e instanceof Error ? e.message : "Couldn't reach the app's server.")
+        return
+      }
+    }
+    if (st?.accessOk) {
+      await useSync.getState().syncNow()
+      await useAi.getState().refreshCompany()
+      setBusy(false)
+      onSaved?.()
+      return
+    }
+    // Not accepted: compare short fingerprints so a typo or a stale server setting is easy to spot.
+    let server: string | null | undefined
+    try {
+      server = ((await (await fetch('/api/status')).json()) as { accessKeyId?: string | null }).accessKeyId
+    } catch {
+      server = undefined
+    }
+    const mine = await fingerprint(entered)
     setBusy(false)
-    if (useAi.getState().company) onSaved?.()
-    else setError("That access code wasn't accepted. Check it with whoever set up the app.")
+    setError(
+      server
+        ? `That access code wasn't accepted (yours: ${mine}, server: ${server}). Check for a missing or extra character, or copy the code again from APP_ACCESS_KEY in Vercel.`
+        : "That access code wasn't accepted. Check it with whoever set up the app.",
+    )
   }
   return (
     <Flex vertical gap={10}>
