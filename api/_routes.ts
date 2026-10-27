@@ -1,4 +1,5 @@
 import type { AnyBulkWriteOperation, Db } from 'mongodb'
+import { createHash } from 'node:crypto'
 import { handleResearch } from './_research.js'
 import { companyAiConfigured, companyAiStatus, handleAi } from './_ai.js'
 import {
@@ -59,6 +60,11 @@ async function readJson(request: Request): Promise<Record<string, unknown> | Res
   }
 }
 
+const accessKeyId = () => {
+  const k = process.env.APP_ACCESS_KEY?.trim()
+  return k ? createHash('sha256').update(k).digest('hex').slice(0, 6) : null
+}
+
 /** GET /api/status — whether the shared database is set up. Reveals no data. */
 export async function handleStatus(request: Request): Promise<Response> {
   const denied = checkAccess(request)
@@ -69,6 +75,8 @@ export async function handleStatus(request: Request): Promise<Response> {
     database: databaseConfigured(),
     accessRequired: !!process.env.APP_ACCESS_KEY || isHosted(),
     accessOk: !denied,
+    // A short fingerprint of the server's code, so a mismatch can be spotted without revealing it.
+    accessKeyId: accessKeyId(),
     // Whether a company AI key is set up (never the key); details need the access code.
     companyKey: companyAiConfigured(),
     ...(companyAi ? { companyAi } : {}),
