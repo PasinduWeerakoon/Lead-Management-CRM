@@ -42,15 +42,15 @@ AI and Apollo usage is billed to each user's own key, not to AWS. Check current 
    ```
 4. **Bootstrap CDK** in the account and region (once per account/region):
    ```bash
-   AWS_PROFILE=leads APP_ACCESS_KEY=placeholder-123456 npm --prefix infra run bootstrap
+   AWS_PROFILE=leads npm --prefix infra run bootstrap
    ```
 
 ## Deploy
 
-Choose a workspace access code (the app has no login; everyone on the team uses this code). Use at least 12 random characters and keep it in your password manager.
+No access code is needed: anyone with the app's address can use it. The company GPT key is protected by its daily limit. (Optional: add `APP_ACCESS_KEY='a-long-random-code'` to the command to make everyone enter a code once per browser.)
 
 ```bash
-AWS_PROFILE=leads APP_ACCESS_KEY='your-long-random-code' npm run deploy
+AWS_PROFILE=leads OPENAI_API_KEY='sk-…' npm run deploy
 ```
 
 This builds the web app and the Lambda, then creates or updates everything in one CloudFormation stack (`LeadsApp`). The first deploy takes **10–15 minutes** (mostly CloudFront). When it finishes it prints:
@@ -63,7 +63,7 @@ Open AppUrl, click **Access code needed** in the sidebar footer, and enter the c
 **Company GPT key (recommended):** add `OPENAI_API_KEY='sk-…'` to the deploy command. The key goes only into the Lambda's settings; the browser never receives it. Everyone with the access code can then use GPT without their own key, up to **$10 a day in total** (change with `AI_DAILY_CAP_USD=…`). Today's spend is kept in a small DynamoDB table (cents a month at most) and resets at midnight Sri Lanka time. When the limit is reached, AI requests stop with a clear message and a notice in the app.
 
 ```bash
-AWS_PROFILE=leads APP_ACCESS_KEY='your-long-random-code' OPENAI_API_KEY='sk-…' npm run deploy
+AWS_PROFILE=leads OPENAI_API_KEY='sk-…' npm run deploy
 ```
 
 Optional shared database: add `MONGODB_URI='mongodb+srv://…'` to the deploy command. In Atlas → Network Access, Lambda needs `0.0.0.0/0` (with a strong database password), because Lambda has no fixed IP without a paid NAT gateway.
@@ -72,7 +72,7 @@ Optional shared database: add `MONGODB_URI='mongodb+srv://…'` to the deploy co
 
 Run the same deploy command after any change. Hashed app files are cached for a year; `index.html` is never cached and is refreshed automatically, so users get the new version on their next page load.
 
-**Changing the access code:** deploy again with the new `APP_ACCESS_KEY`. Everyone enters the new code once.
+**Access code (optional):** deploy with `APP_ACCESS_KEY='…'` to require one, or without it to keep the app open.
 
 ## Custom domain (optional)
 
@@ -81,7 +81,7 @@ Add a certificate in **ACM in us-east-1** for e.g. `leads.yourcompany.com`, then
 ## Removing it
 
 ```bash
-AWS_PROFILE=leads APP_ACCESS_KEY='your-long-random-code' npm --prefix infra run destroy
+AWS_PROFILE=leads npm --prefix infra run destroy
 ```
 
 This deletes the stack, the bucket and the logs. Contacts live in each user's browser (or MongoDB if enabled), so they are not affected.
@@ -89,7 +89,7 @@ This deletes the stack, the bucket and the logs. Contacts live in each user's br
 ## Security notes
 
 - The Lambda refuses any request without CloudFront's secret `x-origin-verify` header, so its Function URL can't be used directly.
-- Every API call needs the workspace access code on AWS (the server refuses to run without one).
+- An access code is optional (`APP_ACCESS_KEY`). Without it, the API is open to anyone with the address, so the company GPT key's daily limit is what caps spending.
 - CloudFront adds the same security headers as `vercel.json`: Content-Security-Policy, HSTS, no-referrer, nosniff, frame-deny and Permissions-Policy.
 - The S3 bucket is private; only CloudFront can read it (Origin Access Control).
 - No API keys are in the build. The company GPT key exists only in the Lambda's environment; personal AI and Apollo keys stay in each user's browser.
@@ -99,10 +99,10 @@ This deletes the stack, the bucket and the logs. Contacts live in each user's br
 
 | Problem | Fix |
 |---|---|
-| `Set APP_ACCESS_KEY…` during deploy | Add `APP_ACCESS_KEY='…'` (12+ characters) to the command |
+| `APP_ACCESS_KEY must be at least 12 characters` | Use a longer code, or leave it out |
 | `Could not connect to the endpoint URL` | Fix the AWS CLI region or endpoint (setup step 2) |
 | `This stack uses assets, so the toolkit stack must be deployed` | Run the bootstrap step |
-| App loads but research says "Enter the workspace access code" | Click **Access code needed** in the sidebar and enter it |
+| App asks for an access code | `APP_ACCESS_KEY` is set; enter it once, or deploy without it |
 | Research is slow for some companies | Each company is capped at ~40 s; sites that block bots show "No website found" |
 | Lambda errors | CloudWatch → Log groups → the `LeadsApp-ApiLogs…` group (kept 14 days) |
 

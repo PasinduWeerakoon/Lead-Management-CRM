@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import * as cdk from 'aws-cdk-lib'
@@ -14,8 +14,8 @@ import type { Construct } from 'constructs'
 const root = (p: string) => fileURLToPath(new URL(`../../${p}`, import.meta.url))
 
 export interface LeadsStackProps extends cdk.StackProps {
-  /** Workspace access code the app asks for (there's no login). */
-  accessKey: string
+  /** Optional workspace access code; without it the app is open to anyone with the URL. */
+  accessKey?: string
   /** Optional MongoDB Atlas connection string for the shared database. */
   mongodbUri?: string
   /** Optional company OpenAI key, used only on the server (/api/ai). */
@@ -35,8 +35,10 @@ export class LeadsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: LeadsStackProps) {
     super(scope, id, props)
 
-    // Stable across deploys (derived, not random), so CloudFront and Lambda always agree.
-    const originSecret = createHash('sha256').update(`${props.accessKey}:origin:${id}`).digest('hex')
+    // Shared by CloudFront and the Lambda only. Set per deploy, and both are updated in the same deploy.
+    const originSecret = createHash('sha256')
+      .update(`${randomBytes(32).toString('hex')}:origin:${id}`)
+      .digest('hex')
 
     // --- API: one Lambda for all server functions ---------------------------------------------
     const logGroup = new logs.LogGroup(this, 'ApiLogs', {
@@ -65,7 +67,7 @@ export class LeadsStack extends cdk.Stack {
       logGroup,
       environment: {
         NODE_ENV: 'production',
-        APP_ACCESS_KEY: props.accessKey,
+        ...(props.accessKey ? { APP_ACCESS_KEY: props.accessKey } : {}),
         ORIGIN_VERIFY_SECRET: originSecret,
         ...(props.mongodbUri ? { MONGODB_URI: props.mongodbUri, MONGODB_DB: 'leads' } : {}),
         ...(props.openaiApiKey && spend

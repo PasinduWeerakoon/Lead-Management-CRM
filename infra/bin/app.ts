@@ -3,17 +3,15 @@ import { LeadsStack } from '../lib/leads-stack'
 
 /**
  * Deploy with:
- *   APP_ACCESS_KEY='a-long-random-code' npm run deploy        (from the project root)
+ *   npm run deploy        (from the project root)
+ * Optional: APP_ACCESS_KEY='a-long-random-code' to require a workspace access code.
  * Optional: MONGODB_URI='mongodb+srv://…' to switch on the shared database.
  * Optional: OPENAI_API_KEY='sk-…' for a company GPT key kept on the server (AI_DAILY_CAP_USD, default 10).
  * Region and account come from your AWS CLI profile (AWS_PROFILE / AWS_REGION).
  */
-const accessKey = process.env.APP_ACCESS_KEY?.trim()
-if (!accessKey || accessKey.length < 12) {
-  throw new Error(
-    'Set APP_ACCESS_KEY (at least 12 characters) before deploying — it protects the app, which has no login.',
-  )
-}
+// Optional: with APP_ACCESS_KEY set, the app asks for that code; without it, it's open to anyone with the URL.
+const accessKey = process.env.APP_ACCESS_KEY?.trim() || undefined
+if (accessKey && accessKey.length < 12) throw new Error('APP_ACCESS_KEY must be at least 12 characters.')
 
 const app = new cdk.App()
 new LeadsStack(app, process.env.LEADS_STACK_NAME ?? 'LeadsApp', {

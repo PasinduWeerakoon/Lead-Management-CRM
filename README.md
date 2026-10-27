@@ -38,7 +38,7 @@ Set `OPENAI_API_KEY` (and optionally `AI_DAILY_CAP_USD`, default 10) on the serv
 AI and Apollo keys are entered by each user in the app and never stored on the server.
 
 To share data between browsers and people, connect MongoDB Atlas (see **Shared database and profiles** below)
-and set `MONGODB_URI`, `MONGODB_DB` and `APP_ACCESS_KEY` under Settings → Environment Variables.
+and set `OPENAI_API_KEY` (and optionally `MONGODB_URI`, `MONGODB_DB`, and `APP_ACCESS_KEY` to require an access code) under Settings → Environment Variables.
 
 > Vercel's Hobby plan is for personal, non-commercial use. Company use needs Vercel Pro.
 

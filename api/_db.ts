@@ -46,26 +46,18 @@ export async function ensureIndexes(db: Db) {
   ])
 }
 
-/**
- * There's no login, so a shared workspace access code (APP_ACCESS_KEY) keeps the data private.
- * It's required whenever the app is hosted (Vercel or AWS Lambda); only the local dev server runs
- * open without one.
- */
 /** Running on a real host rather than the local dev server. */
 export const isHosted = () =>
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production'
 
+/**
+ * Optional workspace access code. With APP_ACCESS_KEY set, every request needs it; without it the
+ * app is open to anyone with the URL (the company AI key is then protected only by its daily limit).
+ */
 export function checkAccess(request: Request): Response | undefined {
   // Trimmed: a value pasted into Vercel with a stray space or line break still works.
   const expected = process.env.APP_ACCESS_KEY?.trim()
-  if (!expected) {
-    if (isHosted())
-      return json(503, {
-        error: 'Set APP_ACCESS_KEY on the server (Vercel or Lambda environment) before using it.',
-        code: 'no_access_key',
-      })
-    return undefined
-  }
+  if (!expected) return undefined
   const given = (request.headers.get('x-app-key') ?? '').trim()
   const a = Buffer.from(given)
   const b = Buffer.from(expected)

@@ -113,7 +113,7 @@ describe('/api/profiles and /api/data on MongoDB', () => {
     expect((await handleData(req('GET', '/api/data?profileId=a&table=settings&since=0'), mdb)).status).toBe(400)
   })
 
-  it('requires the workspace access code when one is set, and always on Vercel', async () => {
+  it('requires the workspace access code only when one is set', async () => {
     process.env.APP_ACCESS_KEY = 'open-sesame-123'
     try {
       expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(401)
@@ -126,9 +126,10 @@ describe('/api/profiles and /api/data on MongoDB', () => {
     } finally {
       delete process.env.APP_ACCESS_KEY
     }
+    // Hosted without a code: open.
     process.env.VERCEL = '1'
     try {
-      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(503)
+      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(200)
     } finally {
       delete process.env.VERCEL
     }
@@ -280,10 +281,10 @@ describe('syncing a profile between this browser and MongoDB', () => {
 })
 
 describe('access code on AWS Lambda', () => {
-  it('is required when running on Lambda, like on Vercel', async () => {
+  it('is optional on Lambda, and enforced when set', async () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'leads-api'
     try {
-      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(503)
+      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(200)
       process.env.APP_ACCESS_KEY = 'open-sesame-123'
       expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(401)
     } finally {

@@ -5,7 +5,6 @@ import { companyAiConfigured, companyAiStatus, handleAi } from './_ai.js'
 import {
   checkAccess,
   databaseConfigured,
-  isHosted,
   json,
   nextStamp,
   PROFILE_ID,
@@ -74,7 +73,7 @@ export async function handleStatus(request: Request): Promise<Response> {
   if (!denied && companyAiConfigured()) companyAi = await companyAiStatus().catch(() => undefined)
   return json(200, {
     database: databaseConfigured(),
-    accessRequired: !!process.env.APP_ACCESS_KEY || isHosted(),
+    accessRequired: !!process.env.APP_ACCESS_KEY?.trim(),
     accessOk: !denied,
     // A short fingerprint of the server's code, so a mismatch can be spotted without revealing it.
     accessKeyId: accessKeyId(),
