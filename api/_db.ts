@@ -56,7 +56,8 @@ export const isHosted = () =>
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production'
 
 export function checkAccess(request: Request): Response | undefined {
-  const expected = process.env.APP_ACCESS_KEY
+  // Trimmed: a value pasted into Vercel with a stray space or line break still works.
+  const expected = process.env.APP_ACCESS_KEY?.trim()
   if (!expected) {
     if (isHosted())
       return json(503, {
@@ -65,7 +66,7 @@ export function checkAccess(request: Request): Response | undefined {
       })
     return undefined
   }
-  const given = request.headers.get('x-app-key') ?? ''
+  const given = (request.headers.get('x-app-key') ?? '').trim()
   const a = Buffer.from(given)
   const b = Buffer.from(expected)
   if (a.length !== b.length || !timingSafeEqual(a, b))
