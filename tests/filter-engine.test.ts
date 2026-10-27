@@ -153,10 +153,6 @@ describe('presets', () => {
     }
   })
 
-  it('Dynamics 365 preset finds senior tech or Microsoft-stack people', () => {
-    const preset = PRESETS.find((p) => p.key === 'd365')!
-    expect(names(preset.filter)).toEqual(['Ana CIO', 'Ben Dyn', 'Ed VP', 'Flo Data'])
-  })
 })
 
 describe('describe and highlight', () => {

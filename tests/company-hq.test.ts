@@ -7,7 +7,6 @@ import { db } from '../src/lib/db'
 import { estimateHqCost, toHqRow, validateHqBatch } from '../src/lib/ai/company-hq'
 import { toScoringRow } from '../src/lib/ai/scoring'
 import { compileFilter } from '../src/lib/filters/engine'
-import { builtInPresetId, PRESETS } from '../src/lib/filters/presets'
 import type { Condition, FilterGroup } from '../src/lib/filters/schema'
 import { toExportRow } from '../src/lib/export/rows'
 import { mergeContact, normalizeCompany } from '../src/lib/normalize'
@@ -209,11 +208,6 @@ describe('location filters', () => {
     expect(hqText(unknownHq.companyHq)).toBeUndefined()
   })
 
-  it('ships a Greater Boston built-in preset', () => {
-    const boston = PRESETS.find((p) => p.key === 'boston')!
-    const pred = compileFilter(boston.filter, { packs: new Map() })!
-    expect(all.filter((c) => pred(c)).map((c) => c.id)).toEqual([local.id, hqBoston.id])
-  })
 })
 
 describe('HQ elsewhere in the app', () => {
@@ -260,8 +254,8 @@ describe('saving HQs', () => {
     expect((await db.contacts.get(b.id))?.companyHq).toBeUndefined()
   })
 
-  it('adds the Greater Boston preset to the database', async () => {
-    expect(await db.presets.get(builtInPresetId('boston'))).toBeDefined()
+  it('keeps only the C-suite and Senior decision-makers presets', async () => {
+    expect((await db.presets.toArray()).map((p) => p.builtIn).sort()).toEqual(['c-suite', 'senior'])
   })
 })
 

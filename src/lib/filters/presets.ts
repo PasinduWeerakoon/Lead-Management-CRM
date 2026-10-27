@@ -96,59 +96,6 @@ export const PRESETS: Preset[] = [
     description: 'C-level, VPs, Heads and Directors',
     filter: { combinator: 'and', items: [cond({ field: 'seniority', op: 'any_of', value: SENIOR })] },
   },
-  {
-    key: 'tech-leaders',
-    name: 'Tech & digital leaders',
-    description: 'Senior people in technology or digital roles',
-    filter: {
-      combinator: 'and',
-      items: [
-        cond({ field: 'seniority', op: 'any_of', value: SENIOR }),
-        cond({ field: 'function', op: 'any_of', value: ['Technology', 'Digital'] }),
-      ],
-    },
-  },
-  {
-    key: 'd365',
-    name: 'Dynamics 365 decision-makers',
-    description: 'Senior people in tech/digital roles, or who mention the Microsoft stack',
-    filter: {
-      combinator: 'and',
-      items: [
-        cond({ field: 'seniority', op: 'any_of', value: SENIOR }),
-        {
-          id: 'preset-group-d365',
-          kind: 'group',
-          combinator: 'or',
-          conditions: [
-            cond({ field: 'function', op: 'any_of', value: ['Technology', 'Digital', 'Operations'] }),
-            cond({ field: 'keywordPack', op: 'matches_pack', value: BUILT_IN_PACK_IDS.microsoft }),
-          ],
-        },
-      ],
-    },
-  },
-  {
-    key: 'microsoft',
-    name: 'Mentions the Microsoft stack',
-    description: 'Title or company matches the Microsoft Dynamics & Power Platform pack',
-    filter: {
-      combinator: 'and',
-      items: [cond({ field: 'keywordPack', op: 'matches_pack', value: BUILT_IN_PACK_IDS.microsoft })],
-    },
-  },
-  {
-    key: 'boston',
-    name: 'Greater Boston',
-    description: 'Based in the Boston area, or at a company headquartered there',
-    filter: { combinator: 'and', items: [cond({ field: 'anyLocation', op: 'contains', value: 'Boston' })] },
-  },
-  {
-    key: 'recent',
-    name: 'Connected in the last 2 years',
-    description: 'Warmer relationships are easier to reopen',
-    filter: { combinator: 'and', items: [cond({ field: 'connectedOn', op: 'within_last', value: 24 })] },
-  },
 ]
 
 /** Presets are templates: every use gets fresh ids so edits never collide. */
@@ -165,7 +112,10 @@ export function instantiate(filter: FilterGroup): FilterGroup {
 }
 
 /** Built-ins added after the first release, seeded into existing databases by the matching upgrade. */
-export const PRESETS_ADDED_IN_V6 = ['boston']
+export const PRESETS_ADDED_IN_V6: string[] = []
+
+/** The only built-in presets now; v10 removes every other preset from existing databases. */
+export const KEPT_PRESET_KEYS = PRESETS.map((p) => p.key)
 
 /** Stable id for a built-in preset, so restoring resets the same record instead of adding a copy. */
 export const builtInPresetId = (key: string) => `preset-${key}`

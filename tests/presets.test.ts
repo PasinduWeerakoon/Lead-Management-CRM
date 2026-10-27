@@ -35,8 +35,8 @@ describe('stored presets', () => {
     expect(edited.description).toBeUndefined()
     expect(edited.filter.items[0]).toMatchObject({ field: 'company' })
 
-    await deletePreset(builtInPresetId('recent'))
-    expect(await db.presets.get(builtInPresetId('recent'))).toBeUndefined()
+    await deletePreset(builtInPresetId('senior'))
+    expect(await db.presets.get(builtInPresetId('senior'))).toBeUndefined()
 
     const order = sortPresets(await db.presets.toArray()).map((p) => p.name)
     expect(order[0]).toBe('Sri Lanka banks') // your presets come first
@@ -45,7 +45,7 @@ describe('stored presets', () => {
   it('restore brings built-ins back and resets edits, keeping your own', async () => {
     await restoreBuiltInPresets()
     expect((await db.presets.get(builtInPresetId('c-suite')))!.name).toBe('C-suite')
-    expect(await db.presets.get(builtInPresetId('recent'))).toBeDefined()
+    expect(await db.presets.get(builtInPresetId('senior'))).toBeDefined()
     expect((await db.presets.toArray()).some((p) => p.name === 'Sri Lanka banks')).toBe(true)
   })
 

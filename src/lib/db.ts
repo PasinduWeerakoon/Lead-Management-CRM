@@ -1,9 +1,9 @@
 import Dexie, { type EntityTable, type Transaction } from 'dexie'
 import type { Brief, Contact, ImportRecord } from './schemas'
 import type { KeywordPack, SavedPreset, SavedView } from './filters/schema'
-import { BUILT_IN_PACKS, builtInPresetRecords, PRESETS_ADDED_IN_V6 } from './filters/presets'
+import { BUILT_IN_PACKS, builtInPresetId, builtInPresetRecords, KEPT_PRESET_KEYS, PRESETS_ADDED_IN_V6 } from './filters/presets'
 import type { AiUsageRecord } from './ai/settings'
-import { sampleBriefRecords } from './ai/sample-briefs'
+import { SAMPLE_BRIEFS, sampleBriefRecords } from './ai/sample-briefs'
 import { markQuiet } from './sync/marks'
 import { classifyTitle } from './classify-title'
 
@@ -111,6 +111,17 @@ db.version(9)
         Object.assign(c, classifyTitle(c.position))
       }),
   )
+
+// Clean slate: keep only the C-suite and Senior decision-makers presets and the Founders & CEOs
+// brief; every other preset and brief (built-in or your own) is removed.
+db.version(10)
+  .stores({})
+  .upgrade(async (tx) => {
+    const keepPresets = new Set(KEPT_PRESET_KEYS.map(builtInPresetId))
+    const keepBriefs = new Set(SAMPLE_BRIEFS.map((b) => b.id))
+    await tx.table('presets').filter((p: SavedPreset) => !keepPresets.has(p.id)).delete()
+    await tx.table('briefs').filter((b: Brief) => !keepBriefs.has(b.id)).delete()
+  })
 
 db.on('populate', async (tx) => {
   // Built-in packs, presets and briefs exist in every browser; they aren't sent to the shared database.
