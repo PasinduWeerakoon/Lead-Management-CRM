@@ -1,6 +1,6 @@
 import type { AnyBulkWriteOperation, Db } from 'mongodb'
-import { handleResearch } from './_research'
-import { companyAiConfigured, companyAiStatus, handleAi } from './_ai'
+import { handleResearch } from './_research.js'
+import { companyAiConfigured, companyAiStatus, handleAi } from './_ai.js'
 import {
   checkAccess,
   databaseConfigured,
@@ -11,7 +11,7 @@ import {
   SYNCED_TABLES,
   withDb,
   type SyncedTable,
-} from './_db'
+} from './_db.js'
 
 /**
  * The shared-database API. Profiles keep their data apart by `profileId`; each record is stored as

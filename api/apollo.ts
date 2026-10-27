@@ -1,4 +1,4 @@
-import { handleApollo } from './_apollo'
+import { handleApollo } from './_apollo.js'
 
 /** Vercel function: POST /api/apollo — forwards allowed Apollo calls with the caller's own key. */
 export function POST(request: Request): Promise<Response> {

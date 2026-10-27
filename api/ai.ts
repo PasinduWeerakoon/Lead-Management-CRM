@@ -1,4 +1,4 @@
-import { handleAi } from './_ai'
+import { handleAi } from './_ai.js'
 
 /** Vercel function: /api/ai — company OpenAI key on the server, with a daily spending limit. */
 export const config = { maxDuration: 60 }

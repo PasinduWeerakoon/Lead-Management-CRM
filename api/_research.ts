@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
-import { checkAccess, json } from './_db'
+import { checkAccess, json } from './_db.js'
 
 /**
  * Reads a company's own public website and job feeds for "Company research". Browsers can't fetch

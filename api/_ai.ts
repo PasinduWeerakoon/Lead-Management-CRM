@@ -1,6 +1,6 @@
-import { AI_MODELS } from '../src/lib/ai/models'
-import { checkAccess, json } from './_db'
-import { dailyCapUsd, spendDay, spendStore } from './_spend'
+import { AI_MODELS } from '../src/lib/ai/models.js'
+import { checkAccess, json } from './_db.js'
+import { dailyCapUsd, spendDay, spendStore } from './_spend.js'
 
 /**
  * /api/ai — the company OpenAI key, kept on the server (OPENAI_API_KEY) and never sent to the

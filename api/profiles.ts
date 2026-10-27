@@ -1,4 +1,4 @@
-import { handleProfiles } from './_routes'
+import { handleProfiles } from './_routes.js'
 
 /** Vercel function: /api/profiles — list, create, rename and delete profiles. */
 export const GET = (request: Request) => handleProfiles(request)

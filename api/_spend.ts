@@ -1,4 +1,4 @@
-import { getDb } from './_db'
+import { getDb } from './_db.js'
 
 /**
  * Today's spend on the company AI key, shared by every server instance where possible:
