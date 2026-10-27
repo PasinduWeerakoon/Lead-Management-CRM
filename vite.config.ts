@@ -9,7 +9,7 @@ import { routeApi } from './api/_routes'
 const securityHeaders = Object.fromEntries(vercel.headers[0].headers.map((h) => [h.key, h.value]))
 
 /** Server-only settings the /api functions read; never exposed to browser code (no VITE_ prefix). */
-const SERVER_ENV = ['MONGODB_URI', 'MONGODB_DB', 'APP_ACCESS_KEY'] as const
+const SERVER_ENV = ['MONGODB_URI', 'MONGODB_DB', 'APP_ACCESS_KEY', 'OPENAI_API_KEY', 'AI_DAILY_CAP_USD'] as const
 
 /** Runs the same /api functions as Vercel (Apollo forwarding, profiles, shared data) in the dev server. */
 function apiRoutes(): Plugin {

@@ -25,6 +25,8 @@ await build({
     'mongodb-client-encryption',
     'gcp-metadata',
     '@aws-sdk/credential-providers',
+    // Part of the Lambda runtime (used for the AI spend table).
+    '@aws-sdk/client-dynamodb',
   ],
   logLevel: 'info',
 })

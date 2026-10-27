@@ -9,6 +9,7 @@ import { buildTheme, cssVars, PALETTE } from './theme'
 import { useUi } from './store'
 import { Sidebar } from './Sidebar'
 import { useAi } from '../features/ai/store'
+import { CapNotice } from '../features/ai/CapNotice'
 import { ContactsPage } from '../features/contacts/ContactsPage'
 import { ImportPage } from '../features/import/ImportPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
@@ -59,6 +60,7 @@ export function Root() {
   return (
     <ConfigProvider theme={buildTheme(dark)} componentSize="middle">
       <AntApp style={{ height: '100%' }}>
+        <CapNotice />
         <Layout style={{ height: '100%' }}>
           <Sidebar />
           <Layout.Content style={{ minWidth: 0, overflow: 'hidden' }}>

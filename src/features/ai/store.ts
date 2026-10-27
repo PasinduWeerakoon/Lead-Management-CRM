@@ -15,6 +15,8 @@ import {
   type KeyStorage,
 } from '../../lib/ai/settings'
 import { DEFAULT_MODEL_BY_PROVIDER, formatUsd, modelById, type Provider } from '../../lib/ai/models'
+import { COMPANY_KEY, type CompanyAi } from '../../lib/ai/company'
+import { getStatus } from '../../lib/sync/api'
 
 export type KeyStatus = 'loading' | 'none' | 'locked' | 'ready'
 
@@ -37,7 +39,13 @@ interface AiState {
   status: KeyStatus
   /** The active key came from `.env.local` (development only). */
   devKey: boolean
+  /** The server holds a company OpenAI key (with a daily limit); undefined when it doesn't. */
+  companyAi?: CompanyAi
+  /** The active key is the company key on the server (the browser never has the key itself). */
+  company: boolean
   init: () => Promise<void>
+  /** Asks the server whether a company key is set up, and today's spend against its limit. */
+  refreshCompany: () => Promise<void>
   update: (patch: Partial<Pick<AiSettings, 'model' | 'effort' | 'softLimitUsd'>>) => Promise<void>
   setProvider: (provider: Provider) => Promise<void>
   setKey: (key: string, storage: KeyStorage, passphrase?: string) => Promise<void>
@@ -45,17 +53,23 @@ interface AiState {
   remove: () => Promise<void>
 }
 
-function keyState(settings: AiSettings): Pick<AiState, 'key' | 'status' | 'devKey'> {
+function keyState(settings: AiSettings, companyAi?: CompanyAi): Pick<AiState, 'key' | 'status' | 'devKey' | 'company'> {
   const p = settings.provider
   const key = readSessionKey(p)
   const devKey = p === 'groq' && !!DEV_GROQ && !DEV_GROQ.expired && key === DEV_GROQ.key
-  return { key, devKey, status: key ? 'ready' : settings.keys[p]?.encryptedKey ? 'locked' : 'none' }
+  // Your own key wins; with none saved, OpenAI runs on the company key held by the server.
+  if (!key && p === 'openai' && companyAi && !settings.keys.openai?.encryptedKey)
+    return { key: COMPANY_KEY, devKey: false, company: true, status: 'ready' }
+  return { key, devKey, company: false, status: key ? 'ready' : settings.keys[p]?.encryptedKey ? 'locked' : 'none' }
 }
+
+const ownKey = (settings: AiSettings, p: Provider) => !!readSessionKey(p) || !!settings.keys[p]?.encryptedKey
 
 export const useAi = create<AiState>((set, get) => ({
   settings: DEFAULT_AI_SETTINGS,
   status: 'loading',
   devKey: false,
+  company: false,
 
   init: async () => {
     let settings = await loadAiSettings()
@@ -72,7 +86,22 @@ export const useAi = create<AiState>((set, get) => ({
         }
       }
     }
-    set({ settings, ...keyState(settings) })
+    set({ settings, ...keyState(settings, get().companyAi) })
+    await get().refreshCompany()
+  },
+
+  refreshCompany: async () => {
+    let companyAi: CompanyAi | undefined
+    try {
+      companyAi = (await getStatus()).companyAi
+    } catch {
+      companyAi = undefined
+    }
+    let settings = get().settings
+    // No key of your own for the current provider: switch to the company's GPT.
+    if (companyAi && !ownKey(settings, settings.provider) && settings.provider !== 'openai' && !get().devKey)
+      settings = await saveAiSettings({ provider: 'openai', model: DEFAULT_MODEL_BY_PROVIDER.openai })
+    set({ companyAi, settings, ...keyState(settings, companyAi) })
   },
 
   update: async (patch) => {
@@ -87,14 +116,14 @@ export const useAi = create<AiState>((set, get) => ({
       provider,
       model: model.provider === provider ? model.id : DEFAULT_MODEL_BY_PROVIDER[provider],
     })
-    set({ settings, ...keyState(settings) })
+    set({ settings, ...keyState(settings, get().companyAi) })
   },
 
   setKey: async (key, storage, passphrase) => {
     const provider = get().settings.provider
     await storeKey(key, storage, passphrase, provider)
     const settings = await loadAiSettings()
-    set({ settings, ...keyState(settings) })
+    set({ settings, ...keyState(settings, get().companyAi) })
   },
 
   unlock: async (passphrase) => {
@@ -105,7 +134,7 @@ export const useAi = create<AiState>((set, get) => ({
   remove: async () => {
     await forgetKey(get().settings.provider)
     const settings = await loadAiSettings()
-    set({ settings, ...keyState(settings) })
+    set({ settings, ...keyState(settings, get().companyAi) })
   },
 }))
 

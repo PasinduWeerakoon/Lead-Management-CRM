@@ -15,6 +15,8 @@ import { MAX_DESCRIPTION } from './filter-prompt'
 import { apiModelId, modelById, PROVIDERS, storedModelId, type CustomModel, type Provider } from './models'
 import { ScoreOutput, SCORE_OUTPUT_SCHEMA } from './scoring'
 import { HqOutput, HQ_OUTPUT_SCHEMA, HQ_SYSTEM_PROMPT } from './company-hq'
+import { announceCap, isCompanyKey } from './company'
+import { readAccessCode } from '../sync/api'
 
 /**
  * OpenAI-compatible chat completions — used for OpenAI, Google Gemini (its OpenAI endpoint), Groq
@@ -97,6 +99,7 @@ async function send(
   init: RequestInit,
   modelLabel: string,
 ): Promise<Response> {
+  if (isCompanyKey(apiKey)) return sendViaServer(path, init, modelLabel)
   const base = PROVIDERS[provider].baseUrl
   if (!base) throw new AiError(`${PROVIDERS[provider].label} isn't an OpenAI-compatible provider.`, 'other')
   let res: Response
@@ -109,6 +112,42 @@ async function send(
   if (!res.ok)
     throw Object.assign(friendly(provider, res.status, await readError(res), modelLabel), { status: res.status })
   return res
+}
+
+/** The company key: same request, sent to this app's /api/ai, which adds the key on the server. */
+async function sendViaServer(path: string, init: RequestInit, modelLabel: string): Promise<Response> {
+  const op = path === '/models' ? 'models' : path === '/chat/completions' ? 'chat' : undefined
+  if (!op) throw new AiError('The company key only runs GPT chat requests.', 'other')
+  const code = readAccessCode()
+  let res: Response
+  try {
+    res = await fetch(`/api/ai?op=${op}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(code ? { 'x-app-key': code } : {}), ...init.headers },
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw new AiError('Stopped.', 'cancelled')
+    throw new AiError("Couldn't reach the app's server for AI. Check your internet connection.", 'network')
+  }
+  if (res.ok) return res
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: string | { message?: string; code?: string }
+    code?: string
+    spentUsd?: number
+    capUsd?: number
+  }
+  if (body.code === 'daily_cap') {
+    const message = String(body.error)
+    announceCap({ message, spentUsd: body.spentUsd, capUsd: body.capUsd })
+    throw Object.assign(new AiError(message, 'limit'), { status: 429 })
+  }
+  if (res.status === 401) throw new AiError('Enter the workspace access code (sidebar) to use the company AI key.', 'auth')
+  if (typeof body.error === 'string') throw Object.assign(new AiError(body.error, 'other'), { status: res.status })
+  // OpenAI's own error, passed through by the server.
+  throw Object.assign(
+    friendly('openai', res.status, { message: String(body.error?.message ?? ''), code: String(body.error?.code ?? '') }, modelLabel),
+    { status: res.status },
+  )
 }
 
 /** Reasoning effort, in the shape each provider expects. */

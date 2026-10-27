@@ -60,6 +60,8 @@ export interface ServerStatus {
   database: boolean
   accessRequired: boolean
   accessOk: boolean
+  /** Set when the server holds a company AI key (the key itself is never sent). */
+  companyAi?: import('../ai/company').CompanyAi
 }
 
 export const getStatus = () => call<ServerStatus>('/api/status')

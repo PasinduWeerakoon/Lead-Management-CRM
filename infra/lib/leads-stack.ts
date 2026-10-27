@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import * as cdk from 'aws-cdk-lib'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as lambda from 'aws-cdk-lib/aws-lambda'
 import * as logs from 'aws-cdk-lib/aws-logs'
@@ -17,6 +18,10 @@ export interface LeadsStackProps extends cdk.StackProps {
   accessKey: string
   /** Optional MongoDB Atlas connection string for the shared database. */
   mongodbUri?: string
+  /** Optional company OpenAI key, used only on the server (/api/ai). */
+  openaiApiKey?: string
+  /** Daily limit for the company key, in USD. */
+  aiDailyCapUsd?: number
 }
 
 /**
@@ -38,6 +43,16 @@ export class LeadsStack extends cdk.Stack {
       retention: logs.RetentionDays.TWO_WEEKS,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
+    // Today's spend on the company AI key, shared by every Lambda instance. On-demand: costs cents at most.
+    const spend = props.openaiApiKey
+      ? new dynamodb.Table(this, 'AiSpend', {
+          partitionKey: { name: 'day', type: dynamodb.AttributeType.STRING },
+          billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+          timeToLiveAttribute: 'expiresAt',
+          removalPolicy: cdk.RemovalPolicy.DESTROY,
+        })
+      : undefined
+
     const api = new lambda.Function(this, 'Api', {
       description: 'Leads /api/* — company research, Apollo forwarding, optional shared database',
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -53,8 +68,16 @@ export class LeadsStack extends cdk.Stack {
         APP_ACCESS_KEY: props.accessKey,
         ORIGIN_VERIFY_SECRET: originSecret,
         ...(props.mongodbUri ? { MONGODB_URI: props.mongodbUri, MONGODB_DB: 'leads' } : {}),
+        ...(props.openaiApiKey && spend
+          ? {
+              OPENAI_API_KEY: props.openaiApiKey,
+              AI_DAILY_CAP_USD: String(props.aiDailyCapUsd ?? 10),
+              SPEND_TABLE: spend.tableName,
+            }
+          : {}),
       },
     })
+    spend?.grant(api, 'dynamodb:GetItem', 'dynamodb:UpdateItem')
     const apiUrl = api.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE })
 
     // --- Web app: private bucket ---------------------------------------------------------------

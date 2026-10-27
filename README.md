@@ -25,6 +25,10 @@ Other scripts:
 
 See **[DEPLOY-AWS.md](DEPLOY-AWS.md)**: S3 + CloudFront + one Arm64 Lambda, deployed with one command (`npm run deploy`).
 
+## Company GPT key
+
+Set `OPENAI_API_KEY` (and optionally `AI_DAILY_CAP_USD`, default 10) on the server: in `.env.local` for local development, in Vercel → Settings → Environment Variables, or in the AWS deploy command. The key stays on the server (`/api/ai`); the browser never receives it. Spending stops for the day once the limit is reached and the app shows a notice. On Vercel, set `MONGODB_URI` too if you want the limit counted across all server instances; without it each instance counts on its own.
+
 ## Deploy to Vercel
 
 1. Push this folder to a Git repository.

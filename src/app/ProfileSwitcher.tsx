@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useAi } from '../features/ai/store'
 import { App, Button, Dropdown, Input, Modal, Tooltip, Typography } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -226,6 +227,8 @@ export function SyncStatus() {
             setAsking(false)
             setCode('')
             await syncNow()
+            // The code also unlocks the company AI key, if the server has one.
+            void useAi.getState().refreshCompany()
           }}
         >
           <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>

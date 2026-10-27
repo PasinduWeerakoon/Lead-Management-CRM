@@ -1,5 +1,6 @@
 import type { AnyBulkWriteOperation, Db } from 'mongodb'
 import { handleResearch } from './_research'
+import { companyAiConfigured, companyAiStatus, handleAi } from './_ai'
 import {
   checkAccess,
   databaseConfigured,
@@ -59,12 +60,16 @@ async function readJson(request: Request): Promise<Record<string, unknown> | Res
 }
 
 /** GET /api/status — whether the shared database is set up. Reveals no data. */
-export function handleStatus(request: Request): Response {
+export async function handleStatus(request: Request): Promise<Response> {
   const denied = checkAccess(request)
+  let companyAi: Awaited<ReturnType<typeof companyAiStatus>> | undefined
+  // Only told to people with the access code; never includes the key.
+  if (!denied && companyAiConfigured()) companyAi = await companyAiStatus().catch(() => undefined)
   return json(200, {
     database: databaseConfigured(),
     accessRequired: !!process.env.APP_ACCESS_KEY || isHosted(),
     accessOk: !denied,
+    ...(companyAi ? { companyAi } : {}),
   })
 }
 
@@ -200,5 +205,6 @@ export async function routeApi(path: string, request: Request): Promise<Response
   if (path === '/api/profiles') return handleProfiles(request)
   if (path === '/api/data') return handleData(request)
   if (path === '/api/research') return handleResearch(request)
+  if (path === '/api/ai') return handleAi(request)
   return undefined
 }

@@ -60,6 +60,12 @@ This builds the web app and the Lambda, then creates or updates everything in on
 
 Open AppUrl, click **Access code needed** in the sidebar footer, and enter the code. Each person adds their own AI key under **AI assistant**.
 
+**Company GPT key (recommended):** add `OPENAI_API_KEY='sk-…'` to the deploy command. The key goes only into the Lambda's settings; the browser never receives it. Everyone with the access code can then use GPT without their own key, up to **$10 a day in total** (change with `AI_DAILY_CAP_USD=…`). Today's spend is kept in a small DynamoDB table (cents a month at most) and resets at midnight Sri Lanka time. When the limit is reached, AI requests stop with a clear message and a notice in the app.
+
+```bash
+AWS_PROFILE=leads APP_ACCESS_KEY='your-long-random-code' OPENAI_API_KEY='sk-…' npm run deploy
+```
+
 Optional shared database: add `MONGODB_URI='mongodb+srv://…'` to the deploy command. In Atlas → Network Access, Lambda needs `0.0.0.0/0` (with a strong database password), because Lambda has no fixed IP without a paid NAT gateway.
 
 ## Updating
@@ -86,7 +92,7 @@ This deletes the stack, the bucket and the logs. Contacts live in each user's br
 - Every API call needs the workspace access code on AWS (the server refuses to run without one).
 - CloudFront adds the same security headers as `vercel.json`: Content-Security-Policy, HSTS, no-referrer, nosniff, frame-deny and Permissions-Policy.
 - The S3 bucket is private; only CloudFront can read it (Origin Access Control).
-- No API keys are in the build: AI and Apollo keys stay in each user's browser.
+- No API keys are in the build. The company GPT key exists only in the Lambda's environment; personal AI and Apollo keys stay in each user's browser.
 - The app never reads LinkedIn; company research reads public company websites and job-board feeds, respecting robots.txt.
 
 ## Troubleshooting

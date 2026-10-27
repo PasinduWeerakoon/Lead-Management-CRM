@@ -1,5 +1,5 @@
 import { ApolloKeyForm } from '../enrich/apolloKey'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import {
   Alert,
@@ -344,7 +344,11 @@ function ModelField() {
 
 export function AiSection() {
   const { message, modal } = App.useApp()
-  const { settings, status, key, devKey, update, remove, setProvider } = useAi()
+  const { settings, status, key, devKey, update, remove, setProvider, company, companyAi } = useAi()
+  // Today's company spend, fresh each time the page opens.
+  useEffect(() => {
+    void useAi.getState().refreshCompany()
+  }, [])
   const provider = PROVIDERS[settings.provider]
   const model = modelById(settings.model)
   const slot = settings.keys[settings.provider]
@@ -381,7 +385,7 @@ export function AiSection() {
     <>
       <PageHeader
         title="AI assistant"
-        description="Choose an AI provider and model, and use your own API key to build filters from plain English and score leads. Usage is billed to your own provider account."
+        description="Choose an AI provider and model to build filters from plain English and score leads. GPT runs on the company key kept on the server (with a daily limit) unless you add your own key."
       />
       <Card>
         <Flex vertical gap={20}>
@@ -414,6 +418,29 @@ export function AiSection() {
 
           {status === 'loading' ? null : status === 'locked' ? (
             <UnlockForm />
+          ) : company && companyAi && !replacing ? (
+            <Field
+              label="Company GPT key"
+              help="The company's OpenAI key is kept on the server and never sent to your browser. It has a daily spending limit for everyone together; it resets at midnight Sri Lanka time."
+            >
+              <Flex align="center" gap={8} wrap>
+                <Tag icon={<SafetyOutlined />} color="processing" style={{ padding: '4px 10px', fontSize: 13 }}>
+                  Company key on the server
+                </Tag>
+                <Typography.Text type={companyAi.spentUsd >= companyAi.capUsd ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                  Today: {formatUsd(companyAi.spentUsd)} of {formatUsd(companyAi.capUsd)} used
+                  {companyAi.spentUsd >= companyAi.capUsd ? ' · limit reached' : ''}
+                </Typography.Text>
+                <Flex gap={6} style={{ marginLeft: 'auto' }}>
+                  <Button size="small" onClick={test} loading={testing}>
+                    Test
+                  </Button>
+                  <Button size="small" onClick={() => setReplacing(true)}>
+                    Use my own key
+                  </Button>
+                </Flex>
+              </Flex>
+            </Field>
           ) : status === 'none' || replacing ? (
             <KeyForm onSaved={() => setReplacing(false)} onCancel={replacing ? () => setReplacing(false) : undefined} />
           ) : (
