@@ -109,18 +109,18 @@ function AccessCodeForm({ onUseOwn, onSaved }: { onUseOwn: () => void; onSaved?:
       onSaved?.()
       return
     }
-    // Not accepted: compare short fingerprints so a typo or a stale server setting is easy to spot.
-    let server: string | null | undefined
+    // Not accepted: compare short fingerprints so a typo or a lost header is easy to spot.
+    let diag: { accessKeyId?: string | null; receivedKeyId?: string; receivedLength?: number } = {}
     try {
-      server = ((await (await fetch('/api/status')).json()) as { accessKeyId?: string | null }).accessKeyId
+      diag = (await (await fetch('/api/status', { headers: { 'x-app-key': entered } })).json()) as typeof diag
     } catch {
-      server = undefined
+      // keep the plain message
     }
     const mine = await fingerprint(entered)
     setBusy(false)
     setError(
-      server
-        ? `That access code wasn't accepted (yours: ${mine}, server: ${server}). Check for a missing or extra character, or copy the code again from APP_ACCESS_KEY in Vercel.`
+      diag.accessKeyId
+        ? `That access code wasn't accepted. Typed: ${entered.length} characters, ${mine} · server received: ${diag.receivedKeyId ? `${diag.receivedLength} characters, ${diag.receivedKeyId}` : 'nothing'} · server expects: ${diag.accessKeyId}.`
         : "That access code wasn't accepted. Check it with whoever set up the app.",
     )
   }

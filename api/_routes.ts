@@ -60,9 +60,10 @@ async function readJson(request: Request): Promise<Record<string, unknown> | Res
   }
 }
 
+const fp = (k: string) => createHash('sha256').update(k).digest('hex').slice(0, 6)
 const accessKeyId = () => {
   const k = process.env.APP_ACCESS_KEY?.trim()
-  return k ? createHash('sha256').update(k).digest('hex').slice(0, 6) : null
+  return k ? fp(k) : null
 }
 
 /** GET /api/status — whether the shared database is set up. Reveals no data. */
@@ -77,6 +78,13 @@ export async function handleStatus(request: Request): Promise<Response> {
     accessOk: !denied,
     // A short fingerprint of the server's code, so a mismatch can be spotted without revealing it.
     accessKeyId: accessKeyId(),
+    // Fingerprint and length of the code this request carried, to tell a typo from a lost header.
+    ...(denied && request.headers.get('x-app-key')
+      ? {
+          receivedKeyId: fp(request.headers.get('x-app-key')!.trim()),
+          receivedLength: request.headers.get('x-app-key')!.trim().length,
+        }
+      : {}),
     // Whether a company AI key is set up (never the key); details need the access code.
     companyKey: companyAiConfigured(),
     ...(companyAi ? { companyAi } : {}),
