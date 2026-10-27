@@ -344,7 +344,7 @@ function ModelField() {
 
 export function AiSection() {
   const { message, modal } = App.useApp()
-  const { settings, status, key, devKey, update, remove, setProvider, company, companyAi } = useAi()
+  const { settings, status, key, devKey, update, remove, setProvider, company, companyAi, companyNeedsCode } = useAi()
   // Today's company spend, fresh each time the page opens.
   useEffect(() => {
     void useAi.getState().refreshCompany()
@@ -427,7 +427,10 @@ export function AiSection() {
                 <Tag icon={<SafetyOutlined />} color="processing" style={{ padding: '4px 10px', fontSize: 13 }}>
                   Company key on the server
                 </Tag>
-                <Typography.Text type={companyAi.spentUsd >= companyAi.capUsd ? 'danger' : 'secondary'} style={{ fontSize: 12 }}>
+                <Typography.Text
+                  type={companyAi.spentUsd >= companyAi.capUsd ? 'danger' : 'secondary'}
+                  style={{ fontSize: 12 }}
+                >
                   Today: {formatUsd(companyAi.spentUsd)} of {formatUsd(companyAi.capUsd)} used
                   {companyAi.spentUsd >= companyAi.capUsd ? ' · limit reached' : ''}
                 </Typography.Text>
@@ -441,6 +444,20 @@ export function AiSection() {
                 </Flex>
               </Flex>
             </Field>
+          ) : companyNeedsCode && !replacing && (settings.provider === 'openai' || status === 'none') ? (
+            <Alert
+              type="info"
+              showIcon
+              icon={<SafetyOutlined />}
+              message="The company GPT key is ready on the server"
+              description={
+                <>
+                  Enter the workspace access code (click <b>Access code needed</b> at the bottom of the sidebar) to use
+                  it — no key of your own needed. Or{' '}
+                  <Typography.Link onClick={() => setReplacing(true)}>add your own key</Typography.Link>.
+                </>
+              }
+            />
           ) : status === 'none' || replacing ? (
             <KeyForm onSaved={() => setReplacing(false)} onCancel={replacing ? () => setReplacing(false) : undefined} />
           ) : (

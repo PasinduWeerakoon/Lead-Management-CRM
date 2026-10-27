@@ -41,6 +41,8 @@ interface AiState {
   devKey: boolean
   /** The server holds a company OpenAI key (with a daily limit); undefined when it doesn't. */
   companyAi?: CompanyAi
+  /** The server has a company key, but the access code is needed to use it. */
+  companyNeedsCode: boolean
   /** The active key is the company key on the server (the browser never has the key itself). */
   company: boolean
   init: () => Promise<void>
@@ -70,6 +72,7 @@ export const useAi = create<AiState>((set, get) => ({
   status: 'loading',
   devKey: false,
   company: false,
+  companyNeedsCode: false,
 
   init: async () => {
     let settings = await loadAiSettings()
@@ -92,16 +95,24 @@ export const useAi = create<AiState>((set, get) => ({
 
   refreshCompany: async () => {
     let companyAi: CompanyAi | undefined
+    let companyNeedsCode = false
     try {
-      companyAi = (await getStatus()).companyAi
+      const st = await getStatus()
+      companyAi = st.companyAi
+      companyNeedsCode = !!st.companyKey && !st.accessOk
     } catch {
       companyAi = undefined
     }
     let settings = get().settings
     // No key of your own for the current provider: switch to the company's GPT.
-    if (companyAi && !ownKey(settings, settings.provider) && settings.provider !== 'openai' && !get().devKey)
+    if (
+      (companyAi || companyNeedsCode) &&
+      !ownKey(settings, settings.provider) &&
+      settings.provider !== 'openai' &&
+      !get().devKey
+    )
       settings = await saveAiSettings({ provider: 'openai', model: DEFAULT_MODEL_BY_PROVIDER.openai })
-    set({ companyAi, settings, ...keyState(settings, companyAi) })
+    set({ companyAi, companyNeedsCode, settings, ...keyState(settings, companyAi) })
   },
 
   update: async (patch) => {

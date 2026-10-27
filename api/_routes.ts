@@ -69,6 +69,8 @@ export async function handleStatus(request: Request): Promise<Response> {
     database: databaseConfigured(),
     accessRequired: !!process.env.APP_ACCESS_KEY || isHosted(),
     accessOk: !denied,
+    // Whether a company AI key is set up (never the key); details need the access code.
+    companyKey: companyAiConfigured(),
     ...(companyAi ? { companyAi } : {}),
   })
 }

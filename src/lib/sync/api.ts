@@ -60,7 +60,9 @@ export interface ServerStatus {
   database: boolean
   accessRequired: boolean
   accessOk: boolean
-  /** Set when the server holds a company AI key (the key itself is never sent). */
+  /** The server holds a company AI key (true even before the access code is entered). */
+  companyKey?: boolean
+  /** Today's spend and limit for the company key; only with the access code. */
   companyAi?: import('../ai/company').CompanyAi
 }
 

@@ -92,6 +92,9 @@ describe('/api/ai (company key on the server)', () => {
     expect(JSON.stringify(body)).not.toContain(KEY)
     const without = (await (await handleStatus(new Request('https://app.test/api/status'))).json()) as object
     expect(without).not.toHaveProperty('companyAi')
+    // Only whether a key exists is public.
+    expect(without).toMatchObject({ companyKey: true, accessOk: false })
+    expect(JSON.stringify(without)).not.toContain(KEY)
   })
 
   it('says when the server has no company key', async () => {
