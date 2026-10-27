@@ -37,6 +37,7 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
   const navigate = useNavigate()
   const { status, key, settings } = useAi()
   const companyNeedsCode = useAi((s) => s.companyNeedsCode)
+  const company = useAi((s) => s.company)
   const briefs = useLiveQuery(() => db.briefs.orderBy('updatedAt').reverse().toArray(), [], [] as Brief[])
   const spent = useLiveQuery(() => spendThisMonth(), [], 0)
 
@@ -129,9 +130,19 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
       footer={
         phase === 'setup' ? (
           <Flex justify="space-between" align="center">
-            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-              {modelById(settings.model).label} on {PROVIDERS[settings.provider].label}
-            </Typography.Text>
+            {status !== 'ready' ? (
+              <Typography.Text type="warning" style={{ fontSize: 13 }}>
+                {companyNeedsCode
+                  ? 'Enter the access code above and press Connect to start.'
+                  : status === 'locked'
+                    ? 'Unlock your key above to start.'
+                    : 'Add an API key above to start.'}
+              </Typography.Text>
+            ) : (
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                {modelById(settings.model).label} on {PROVIDERS[settings.provider].label}
+              </Typography.Text>
+            )}
             <Flex gap={8}>
               <Button onClick={onClose}>Cancel</Button>
               <Button
@@ -265,9 +276,13 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
               </span>
             </Flex>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Billed to your {PROVIDERS[settings.provider].label} key. Only name, title, company, location, company HQ,
-              industry, company size, company research findings, seniority, function and connection year are sent —
-              never emails, notes or LinkedIn URLs.
+              {company ? (
+                'Uses the company GPT key (daily limit).'
+              ) : (
+                <>Billed to your {PROVIDERS[settings.provider].label} key.</>
+              )}{' '}
+              Only name, title, company, location, company HQ, industry, company size, company research findings,
+              seniority, function and connection year are sent — never emails, notes or LinkedIn URLs.
               {limit !== null && ` Used this month: ${formatUsd(spent)} of ${formatUsd(limit)}.`}
             </Typography.Text>
             {overCap && (
