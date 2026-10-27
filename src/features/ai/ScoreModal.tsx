@@ -36,6 +36,7 @@ interface Props {
 export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
   const navigate = useNavigate()
   const { status, key, settings } = useAi()
+  const companyNeedsCode = useAi((s) => s.companyNeedsCode)
   const briefs = useLiveQuery(() => db.briefs.orderBy('updatedAt').reverse().toArray(), [], [] as Brief[])
   const spent = useLiveQuery(() => spendThisMonth(), [], 0)
 
@@ -182,7 +183,12 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
           {status === 'none' && (
             <div className="panel" style={{ padding: 16 }}>
               <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>
-                Add your {PROVIDERS[settings.provider].label} API key to score leads
+                {companyNeedsCode ? (
+                  'Connect to the company GPT key'
+                ) : (
+                  <>Add your {PROVIDERS[settings.provider].label} API key</>
+                )}{' '}
+                to score leads
               </Typography.Text>
               <KeyForm />
             </div>

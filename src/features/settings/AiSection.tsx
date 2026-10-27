@@ -1,5 +1,7 @@
 import { ApolloKeyForm } from '../enrich/apolloKey'
 import { useEffect, useState } from 'react'
+import { saveAccessCode } from '../../lib/sync/api'
+import { useSync } from '../../lib/sync/store'
 import { PageHeader } from '../../components/PageHeader'
 import {
   Alert,
@@ -60,7 +62,62 @@ function Field({ label, children, help }: { label: string; children: React.React
 }
 
 /** Add or replace the active provider's key: validates the shape, tests it (free), then saves. */
-export function KeyForm({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void }) {
+/**
+ * Where a key is needed: with a company key on the server, asks for the workspace access code
+ * (no personal key needed); otherwise asks for your own key.
+ */
+export function KeyForm(props: { onSaved?: () => void; onCancel?: () => void }) {
+  const companyNeedsCode = useAi((s) => s.companyNeedsCode)
+  const [own, setOwn] = useState(false)
+  if (companyNeedsCode && !own) return <AccessCodeForm onUseOwn={() => setOwn(true)} onSaved={props.onSaved} />
+  return <OwnKeyForm {...props} />
+}
+
+function AccessCodeForm({ onUseOwn, onSaved }: { onUseOwn: () => void; onSaved?: () => void }) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string>()
+  const connect = async () => {
+    setBusy(true)
+    setError(undefined)
+    saveAccessCode(code)
+    await useSync.getState().syncNow()
+    await useAi.getState().refreshCompany()
+    setBusy(false)
+    if (useAi.getState().company) onSaved?.()
+    else setError("That access code wasn't accepted. Check it with whoever set up the app.")
+  }
+  return (
+    <Flex vertical gap={10}>
+      <Alert
+        type="info"
+        showIcon
+        icon={<SafetyOutlined />}
+        message="The company GPT key is ready on the server"
+        description="Enter the workspace access code to use it. No key of your own is needed; the code is remembered in this browser."
+      />
+      <Flex gap={8}>
+        <Input.Password
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onPressEnter={() => code.trim() && void connect()}
+          placeholder="Workspace access code"
+          autoComplete="off"
+          status={error ? 'error' : undefined}
+        />
+        <Button type="primary" onClick={() => void connect()} loading={busy} disabled={!code.trim()}>
+          Connect
+        </Button>
+      </Flex>
+      {error && <Typography.Text type="danger">{error}</Typography.Text>}
+      <Typography.Link onClick={onUseOwn} style={{ fontSize: 13 }}>
+        Use my own API key instead
+      </Typography.Link>
+    </Flex>
+  )
+}
+
+function OwnKeyForm({ onSaved, onCancel }: { onSaved?: () => void; onCancel?: () => void }) {
   const { message } = App.useApp()
   const { settings, setKey } = useAi()
   const provider = PROVIDERS[settings.provider]
@@ -445,19 +502,7 @@ export function AiSection() {
               </Flex>
             </Field>
           ) : companyNeedsCode && !replacing && (settings.provider === 'openai' || status === 'none') ? (
-            <Alert
-              type="info"
-              showIcon
-              icon={<SafetyOutlined />}
-              message="The company GPT key is ready on the server"
-              description={
-                <>
-                  Enter the workspace access code (click <b>Access code needed</b> at the bottom of the sidebar) to use
-                  it — no key of your own needed. Or{' '}
-                  <Typography.Link onClick={() => setReplacing(true)}>add your own key</Typography.Link>.
-                </>
-              }
-            />
+            <KeyForm />
           ) : status === 'none' || replacing ? (
             <KeyForm onSaved={() => setReplacing(false)} onCancel={replacing ? () => setReplacing(false) : undefined} />
           ) : (

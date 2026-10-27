@@ -27,6 +27,7 @@ interface Props {
 export function HqModal({ shown, selected, all, onClose }: Props) {
   const navigate = useNavigate()
   const { status, key, settings } = useAi()
+  const companyNeedsCode = useAi((s) => s.companyNeedsCode)
   const spent = useLiveQuery(() => spendThisMonth(), [], 0)
 
   const [scope, setScope] = useState<'shown' | 'selected'>(selected.length ? 'selected' : 'shown')
@@ -138,7 +139,12 @@ export function HqModal({ shown, selected, all, onClose }: Props) {
           {needsAi && status === 'none' && (
             <div className="panel" style={{ padding: 16 }}>
               <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>
-                Add your {PROVIDERS[settings.provider].label} API key to look up companies
+                {companyNeedsCode ? (
+                  'Connect to the company GPT key'
+                ) : (
+                  <>Add your {PROVIDERS[settings.provider].label} API key</>
+                )}{' '}
+                to look up companies
               </Typography.Text>
               <KeyForm />
             </div>
