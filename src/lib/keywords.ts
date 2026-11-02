@@ -5,7 +5,8 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
 
 /**
  * Builds a fast matcher for many keywords: one compiled pattern, run once per person, returning the
- * keywords (as written in your packs) found as whole words in the job title or company.
+ * keywords (as written in your packs) found as whole words in the job title, company, company research
+ * or web research.
  */
 export function keywordMatcher(terms: string[]): (c: Contact) => string[] {
   const unique = [...new Map(terms.filter((t) => t.trim()).map((t) => [norm(t), t.trim()])).values()]
@@ -15,7 +16,17 @@ export function keywordMatcher(terms: string[]): (c: Contact) => string[] {
   const canonical = new Map(unique.map((t) => [norm(t), t]))
 
   return (c) => {
-    const text = [c.position, c.company].filter(Boolean).join('\n')
+    const text = [
+      c.position,
+      c.company,
+      c.research?.summary,
+      c.research?.technologies?.map((t) => t.name).join(', '),
+      c.web?.summary,
+      c.web?.keywords?.join(', '),
+      c.web?.facts?.map((f) => f.text).join('\n'),
+    ]
+      .filter(Boolean)
+      .join('\n')
     if (!text) return []
     const found: string[] = []
     for (const m of text.matchAll(re)) {

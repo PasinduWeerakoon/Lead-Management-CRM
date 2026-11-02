@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Flex, Input, Modal, Progress, Radio, Result, Select, Typography } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
@@ -6,8 +6,10 @@ import { db } from '../../lib/db'
 import type { Brief, Contact } from '../../lib/schemas'
 import { formatUsd, modelById, priceKnown, PROVIDERS } from '../../lib/ai/models'
 import { spendThisMonth } from '../../lib/ai/settings'
-import { BRIEF_TEMPLATE, estimateScoringCost, MAX_PER_RUN, BATCH_SIZE } from '../../lib/ai/scoring'
+import { BRIEF_TEMPLATE, estimateScoringCost, BATCH_SIZE } from '../../lib/ai/scoring'
 import { runScoring, type ScoringProgress, type ScoringSummary } from '../../lib/ai/run-scoring'
+import { estimateWebCost } from '../../lib/research/person'
+import { planWeb, runWeb, type WebProgress } from '../../lib/research/run-person'
 import { checkBudget, useAi } from './store'
 import { UnlockForm } from './UnlockForm'
 import { ModelPicker } from './ModelPicker'
@@ -16,6 +18,8 @@ import { SparkIcon } from './AskAi'
 
 const LAST_BRIEF = 'leads.lastBrief'
 const NEW = '__new'
+/** Shorter than this can't describe anyone (".", "x"). */
+const MIN_BRIEF = 3
 
 const readLast = () => {
   try {
@@ -45,24 +49,25 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
   const current = briefs.find((b) => b.id === briefId)
   const [name, setName] = useState<string>()
   const [text, setText] = useState<string>()
-  const briefName = name ?? current?.name ?? 'Dynamics 365 decision-makers'
-  const briefText = text ?? current?.text ?? BRIEF_TEMPLATE
+  const briefName = name ?? current?.name ?? 'My brief'
+  const briefText = text ?? current?.text ?? ''
 
   const [scope, setScope] = useState<'shown' | 'selected'>(selected.length ? 'selected' : 'shown')
-  const [skipScored, setSkipScored] = useState(true)
   const [phase, setPhase] = useState<'setup' | 'running' | 'done'>('setup')
   const [progress, setProgress] = useState<ScoringProgress>()
+  const [webFirst, setWebFirst] = useState(false)
+  const [webProgress, setWebProgress] = useState<WebProgress>()
   const [summary, setSummary] = useState<ScoringSummary>()
+  const [vague, setVague] = useState(false)
   const [error, setError] = useState<string>()
   const abort = useRef<AbortController | null>(null)
 
   const pool = scope === 'selected' && selected.length ? selected : shown
-  const alreadyScored = pool.filter((c) => current && c.ai?.briefId === current.id).length
-  const people = useMemo(() => {
-    const list = skipScored && current ? pool.filter((c) => c.ai?.briefId !== current.id) : pool
-    return list.slice(0, MAX_PER_RUN)
-  }, [pool, skipScored, current])
-  const overCap = (skipScored && current ? pool.length - alreadyScored : pool.length) > MAX_PER_RUN
+  // Everyone is scored every run; earlier results for the same people are replaced.
+  const people = pool
+  const canSearch = settings.provider === 'openai'
+  const toSearch = webFirst && canSearch ? planWeb(people) : []
+  const webEstimate = estimateWebCost(toSearch.length)
   const estimate = estimateScoringCost(settings.model, people, { text: briefText })
   const limit = settings.softLimitUsd
   const mayExceed = limit !== null && spent + estimate.high > limit
@@ -70,23 +75,27 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
   const pickBrief = (id: string) => {
     setBriefId(id === NEW ? undefined : id)
     setName(id === NEW ? '' : undefined)
-    setText(id === NEW ? BRIEF_TEMPLATE : undefined)
+    setText(id === NEW ? '' : undefined)
   }
 
   const start = async () => {
     if (!key) return
     setError(undefined)
+    setVague(false)
     const now = new Date().toISOString()
     // Save the brief first, so results always point at a brief that exists.
-    const brief: Brief = current
-      ? { ...current, name: briefName.trim() || current.name, text: briefText.trim(), updatedAt: now }
-      : {
-          id: crypto.randomUUID(),
-          name: briefName.trim() || 'Untitled brief',
-          text: briefText.trim(),
-          createdAt: now,
-          updatedAt: now,
-        }
+    // A new name means a new brief, so trying an idea never overwrites a saved one.
+    const renamed = !!current && !!briefName.trim() && briefName.trim() !== current.name
+    const brief: Brief =
+      current && !renamed
+        ? { ...current, text: briefText.trim(), updatedAt: now }
+        : {
+            id: crypto.randomUUID(),
+            name: briefName.trim() || 'Untitled brief',
+            text: briefText.trim(),
+            createdAt: now,
+            updatedAt: now,
+          }
     await db.briefs.put(brief)
     setBriefId(brief.id)
     try {
@@ -97,16 +106,50 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
 
     abort.current = new AbortController()
     setPhase('running')
+    let scorePeople = people
+    if (toSearch.length) {
+      const web = await runWeb({
+        apiKey: key,
+        provider: settings.provider,
+        people: toSearch,
+        signal: abort.current.signal,
+        onProgress: setWebProgress,
+        beforeEach: checkBudget,
+      })
+      if (web.stopped) {
+        setSummary({
+          scored: 0,
+          total: people.length,
+          batch: 0,
+          batches: 0,
+          costUsd: web.costUsd,
+          failed: 0,
+          droppedClaims: 0,
+          warnings: [],
+          stopped: `Web search: ${web.stopped}`,
+        })
+        setPhase('done')
+        return
+      }
+      // Score with what the search just found.
+      scorePeople = (await db.contacts.bulkGet(people.map((c) => c.id))).filter((c): c is Contact => !!c)
+    }
     const result = await runScoring({
       apiKey: key,
       model: settings.model,
       effort: settings.effort,
       brief,
-      people,
+      people: scorePeople,
       signal: abort.current.signal,
       onProgress: setProgress,
       beforeBatch: checkBudget,
     })
+    // Everyone at 0 almost always means the brief didn't say who to look for.
+    if (result.scored >= 3) {
+      const after = await db.contacts.bulkGet(scorePeople.map((c) => c.id))
+      const scores = after.flatMap((c) => (c?.ai?.briefId === brief.id ? [c.ai.score] : []))
+      setVague(scores.length > 0 && Math.max(...scores) <= 5)
+    }
     setSummary(result)
     setPhase('done')
   }
@@ -147,7 +190,7 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
               <Button onClick={onClose}>Cancel</Button>
               <Button
                 type="primary"
-                disabled={status !== 'ready' || people.length === 0 || !briefText.trim()}
+                disabled={status !== 'ready' || people.length === 0 || briefText.trim().length < MIN_BRIEF}
                 onClick={() => void start().catch((e) => setError(e instanceof Error ? e.message : 'Could not start.'))}
               >
                 Score {people.length.toLocaleString()} {people.length === 1 ? 'person' : 'people'}
@@ -231,6 +274,7 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
             <Input.TextArea
               value={briefText}
               onChange={(e) => setText(e.target.value)}
+              placeholder={BRIEF_TEMPLATE}
               autoSize={{ minRows: 5, maxRows: 10 }}
               maxLength={4000}
             />
@@ -246,9 +290,10 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
                 </Radio>
               </Flex>
             </Radio.Group>
-            {current && alreadyScored > 0 && (
-              <Checkbox checked={skipScored} onChange={(e) => setSkipScored(e.target.checked)}>
-                Skip {alreadyScored.toLocaleString()} already scored with this brief
+            {canSearch && (
+              <Checkbox checked={webFirst} onChange={(e) => setWebFirst(e.target.checked)}>
+                Search the web first for {toSearch.length || planWeb(people).length} people not searched yet (fills Web
+                research, Keywords and Location)
               </Checkbox>
             )}
           </Flex>
@@ -273,6 +318,15 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
                     ? `${formatUsd(estimate.low)}–${formatUsd(estimate.high)}`
                     : 'unknown for this model'}
                 </b>
+                {toSearch.length > 0 && (
+                  <>
+                    {' '}
+                    + web search{' '}
+                    <b>
+                      {formatUsd(webEstimate.low)}–{formatUsd(webEstimate.high)}
+                    </b>
+                  </>
+                )}
               </span>
             </Flex>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -281,15 +335,10 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
               ) : (
                 <>Billed to your {PROVIDERS[settings.provider].label} key.</>
               )}{' '}
-              Only name, title, company, location, company HQ, industry, company size, company research findings,
-              seniority, function and connection year are sent — never emails, notes or LinkedIn URLs.
+              Only name, title, company, location, company HQ, industry, company size, company and web research
+              findings, seniority, function and connection year are sent — never emails, notes or LinkedIn URLs.
               {limit !== null && ` Used this month: ${formatUsd(spent)} of ${formatUsd(limit)}.`}
             </Typography.Text>
-            {overCap && (
-              <Typography.Text type="warning" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                Only the first {MAX_PER_RUN} people are scored per run. Narrow the list or run again.
-              </Typography.Text>
-            )}
             {mayExceed && (
               <Typography.Text type="warning" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
                 This may reach your monthly limit; scoring stops if it does.
@@ -297,6 +346,22 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
             )}
           </div>
           {error && <Alert type="error" showIcon title={error} />}
+        </Flex>
+      )}
+
+      {running && webProgress && !progress && (
+        <Flex vertical gap={10} style={{ padding: '16px 0 4px' }}>
+          <Typography.Text>
+            Searching the web: {webProgress.done.toLocaleString()} of {webProgress.total.toLocaleString()} people…
+          </Typography.Text>
+          <Progress
+            percent={webProgress.total ? Math.round((webProgress.done / webProgress.total) * 100) : 0}
+            status="active"
+          />
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            {webProgress.found.toLocaleString()} found · {formatUsd(webProgress.costUsd)} so far. Scoring starts when
+            the search is done.
+          </Typography.Text>
         </Flex>
       )}
 
@@ -315,7 +380,7 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
 
       {phase === 'done' && summary && (
         <Result
-          status={summary.stopped && summary.scored === 0 ? 'warning' : 'success'}
+          status={(summary.stopped && summary.scored === 0) || vague ? 'warning' : 'success'}
           title={
             summary.scored
               ? `${summary.scored.toLocaleString()} ${summary.scored === 1 ? 'person' : 'people'} scored`
@@ -323,6 +388,15 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
           }
           subTitle={
             <Flex vertical gap={4}>
+              {vague && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ textAlign: 'left', marginBottom: 8 }}
+                  title="Everyone scored 0. Your brief may be too short or unclear."
+                  description="Describe who you're looking for, e.g. “CEOs and founders of tech companies in Sri Lanka”, then score again."
+                />
+              )}
               {summary.stopped && <span>{summary.stopped}</span>}
               <span>Cost: {formatUsd(summary.costUsd)}</span>
               {summary.failed > 0 && <span>{summary.failed} couldn't be scored. Run again to retry them.</span>}

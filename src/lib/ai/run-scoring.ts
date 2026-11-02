@@ -3,7 +3,7 @@ import type { AiAssessment, Brief, Contact } from '../schemas'
 import { AiError, scoreBatch } from './provider'
 import type { Effort } from './models'
 import { recordUsage } from './settings'
-import { batches, buildScoringSystemPrompt, MAX_PER_RUN, toScoringRow, validateBatch } from './scoring'
+import { batches, buildScoringSystemPrompt, toScoringRow, validateBatch } from './scoring'
 
 export interface ScoringProgress {
   scored: number
@@ -39,7 +39,7 @@ const STOP_KINDS = new Set(['cancelled', 'auth', 'permission', 'model', 'limit',
 
 /** Scores people batch by batch. Results are saved as each batch finishes, so stopping keeps what's done. */
 export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
-  const people = opts.people.slice(0, MAX_PER_RUN)
+  const people = opts.people
   const system = buildScoringSystemPrompt(opts.brief)
   const groups = batches(people)
   const summary: ScoringSummary = {

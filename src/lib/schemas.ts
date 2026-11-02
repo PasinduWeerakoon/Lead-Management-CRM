@@ -168,6 +168,26 @@ export const ContactSchema = z.object({
     })
     .optional(),
   /**
+   * What a web search found about the person's professional profile (never LinkedIn). Every fact
+   * carries a page the search actually returned; personal details are never kept.
+   */
+  web: z
+    .object({
+      status: z.enum(['found', 'not_found', 'error']),
+      /** How sure the search is that the pages are about this person and not a namesake. */
+      match: z.enum(['confident', 'likely']).optional(),
+      summary: z.string().max(400).optional(),
+      location: z.string().max(200).optional(),
+      /** Skills, industries, technologies and topics the person is known for. */
+      keywords: z.array(z.string().max(60)).max(15).optional(),
+      facts: z.array(z.object({ text: z.string().max(300), url: z.string().max(500) })).max(8).optional(),
+      sources: z.array(z.string().max(500)).max(10).optional(),
+      note: z.string().max(300).optional(),
+      model: z.string().max(60).optional(),
+      at: z.string(),
+    })
+    .optional(),
+  /**
    * Your ✓/✗ checks of what the system decided, per item. `value` is what you judged, so a check stops
    * counting once that value changes.
    */

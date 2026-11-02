@@ -806,6 +806,14 @@ button.crumb:hover {
   .viewbar-right {
     display: none;
   }
+  /* Phones: the page title gives way so Import and Export stay on screen. */
+  .topbar .crumbs {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .topbar .ant-btn {
+    padding-inline: 10px;
+  }
 }
 
 /* Company HQ: the place, then where it came from. Location falls back to the HQ in grey. */

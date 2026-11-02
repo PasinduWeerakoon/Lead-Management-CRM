@@ -92,7 +92,7 @@ function headers(provider: Provider, apiKey: string): Record<string, string> {
   }
 }
 
-async function send(
+export async function send(
   provider: Provider,
   apiKey: string,
   path: string,
@@ -116,7 +116,8 @@ async function send(
 
 /** The company key: same request, sent to this app's /api/ai, which adds the key on the server. */
 async function sendViaServer(path: string, init: RequestInit, modelLabel: string): Promise<Response> {
-  const op = path === '/models' ? 'models' : path === '/chat/completions' ? 'chat' : undefined
+  const op =
+    path === '/models' ? 'models' : path === '/chat/completions' ? 'chat' : path === '/responses' ? 'search' : undefined
   if (!op) throw new AiError('The company key only runs GPT chat requests.', 'other')
   const code = readAccessCode()
   let res: Response

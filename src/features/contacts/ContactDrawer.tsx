@@ -264,6 +264,54 @@ function CheckBlock({ contact }: { contact: Contact }) {
   )
 }
 
+/** What the web search found about the person, each fact linking to its page. */
+function WebBlock({ contact }: { contact: Contact }) {
+  const w = contact.web
+  if (!w) return null
+  return (
+    <Flex vertical gap={6}>
+      <Flex justify="space-between" align="baseline">
+        <Label>Web research</Label>
+        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+          {w.match === 'likely' ? 'Likely match · ' : ''}
+          {relativeTime(w.at)}
+        </span>
+      </Flex>
+      {w.status !== 'found' ? (
+        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          {w.note ?? 'Nothing found.'}
+        </Typography.Text>
+      ) : (
+        <>
+          {w.summary && <Typography.Text style={{ fontSize: 13 }}>{w.summary}</Typography.Text>}
+          {w.location && (
+            <div style={{ fontSize: 13 }}>
+              <span style={{ color: 'var(--text-2)' }}>Based in:</span> {w.location}
+            </div>
+          )}
+          {w.facts?.map((f) => (
+            <div key={f.url + f.text} style={{ fontSize: 13 }}>
+              {f.text}{' '}
+              <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
+                source
+              </a>
+            </div>
+          ))}
+          {!!w.keywords?.length && (
+            <span className="chips">
+              {w.keywords.map((k) => (
+                <span key={k} className="kw">
+                  {k}
+                </span>
+              ))}
+            </span>
+          )}
+        </>
+      )}
+    </Flex>
+  )
+}
+
 /** What company research found, each fact with a link to the page it was quoted from. */
 function ResearchBlock({ contact }: { contact: Contact }) {
   const r = contact.research
@@ -549,6 +597,7 @@ export function ContactDrawer({ contact, position, onPrev, onNext, onClose, tagO
           <CompanyEditor contact={contact} />
 
           <ResearchBlock contact={contact} />
+          <WebBlock contact={contact} />
 
           <CheckBlock contact={contact} />
 

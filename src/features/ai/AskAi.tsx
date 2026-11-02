@@ -79,6 +79,8 @@ export function AskAiButton({ packs }: { packs: KeywordPack[] }) {
       const notes = [...res.unsupported, ...res.dropped.map((d) => `Skipped one filter: ${d}.`)]
       if (res.filter.items.length === 0) {
         setNotice({ kind: 'empty', explanation: res.explanation, notes, meta })
+        // Close so the message below isn't hidden; the text stays for another try.
+        setOpen(false)
       } else {
         const previous = draft
         load(res.filter, viewId)
@@ -92,6 +94,7 @@ export function AskAiButton({ packs }: { packs: KeywordPack[] }) {
         notes: [],
         error: e instanceof AiError ? e.message : 'Something went wrong. Please try again.',
       })
+      setOpen(false)
     } finally {
       setBusy(false)
     }

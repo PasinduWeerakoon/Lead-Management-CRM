@@ -48,7 +48,7 @@ export interface AiUsageRecord {
   id: string
   at: string
   model: string
-  feature: 'filters' | 'scoring' | 'hq' | 'research' | 'test'
+  feature: 'filters' | 'scoring' | 'hq' | 'research' | 'web' | 'test'
   inputTokens: number
   outputTokens: number
   costUsd: number
@@ -198,6 +198,8 @@ export async function recordUsage(
   model: string,
   feature: AiUsageRecord['feature'],
   usage: TokenUsage,
+  /** Fees on top of tokens, e.g. web searches. */
+  extraUsd = 0,
 ): Promise<AiUsageRecord> {
   const rec: AiUsageRecord = {
     id: crypto.randomUUID(),
@@ -206,7 +208,7 @@ export async function recordUsage(
     feature,
     inputTokens: usage.input_tokens + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
     outputTokens: usage.output_tokens,
-    costUsd: costUsd(model, usage),
+    costUsd: costUsd(model, usage) + extraUsd,
   }
   await appDb.aiUsage.add(rec)
   return rec

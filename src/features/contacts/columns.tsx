@@ -17,6 +17,7 @@ import {
   TagsOutlined,
   PersonCircleOutlined,
   WorldOutlined,
+  SearchOutlined,
   BriefcaseOutlined,
   UsersGroupOutlined,
   TagOutlined,
@@ -63,6 +64,7 @@ export type ColumnKey =
   | 'phone'
   | 'technologies'
   | 'research'
+  | 'web'
   | 'hiring'
   | 'tags'
   | 'connected'
@@ -76,7 +78,7 @@ export type ColumnKey =
   | 'aiReason'
 
 /** Enrichment a column can run: Apollo person match, Apollo phone, or the company HQ lookup. */
-export type RunKind = 'apollo' | 'phone' | 'hq' | 'research'
+export type RunKind = 'apollo' | 'phone' | 'hq' | 'research' | 'web'
 
 /** Extra data cells may need: filter highlights, matched keywords, and how to run enrichments. */
 export interface CellContext {
@@ -278,6 +280,23 @@ export const COLUMN_DEFS: ColumnDef[] = [
       if (r.status === 'no_site') return status('none', 'No website found', r.note)
       if (r.status === 'error') return status('warn', 'Error', r.note)
       return status('found', r.summary ?? r.domain ?? 'Website read', [r.domain, r.summary].filter(Boolean).join('\n'))
+    },
+  },
+  {
+    key: 'web',
+    title: 'Web research',
+    run: 'web',
+    info: 'What a web search found about the person: company bios, talks, interviews and news. Also adds keywords and fills Location when empty. Every fact links to its page; LinkedIn is never used. Open a person to see the sources.',
+    icon: <SearchOutlined />,
+    width: 300,
+    meta: (rows) => fill(rows, (c) => c.web?.status === 'found'),
+    render: (c) => {
+      const w = c.web
+      if (!w) return muted()
+      if (w.status === 'not_found') return status('none', 'Nothing found', w.note)
+      if (w.status === 'error') return status('warn', 'Error', w.note)
+      const text = w.summary ?? w.facts?.[0]?.text ?? 'Found'
+      return status('found', text, [text, ...(w.facts ?? []).map((f) => `• ${f.text}`)].join('\n'))
     },
   },
   {
@@ -485,23 +504,26 @@ export const COLUMN_DEFS: ColumnDef[] = [
   {
     key: 'keywords',
     title: 'Keywords',
-    info: 'Keywords found as whole words in the title or company — the ones your filters look for, or all your keyword packs when no keyword filter is on.',
+    info: 'Your keyword packs (or the keywords your filters look for) found in the title, company or research, then what the person is known for from “Search the web” (outlined).',
     icon: <KeyOutlined />,
     width: 230,
     meta: (rows, { keywords }) => {
-      const n = rows.filter((c) => keywords.has(c.id)).length
-      return { text: `${n.toLocaleString()} with matches` }
+      const n = rows.filter((c) => keywords.has(c.id) || c.web?.keywords?.length).length
+      return { text: `${n.toLocaleString()} with keywords` }
     },
     render: (c, { keywords }) => {
-      const hits = keywords.get(c.id)
-      return hits?.length ? (
-        <span className="chips">
-          {hits.slice(0, 3).map((t) => (
-            <span key={t} className="kw kw-hit">
+      const hits = keywords.get(c.id) ?? []
+      const lower = new Set(hits.map((t) => t.toLowerCase()))
+      const web = (c.web?.keywords ?? []).filter((t) => !lower.has(t.toLowerCase()))
+      const all = [...hits.map((t) => ({ t, hit: true })), ...web.map((t) => ({ t, hit: false }))]
+      return all.length ? (
+        <span className="chips" title={all.map((k) => k.t).join(', ')}>
+          {all.slice(0, 3).map(({ t, hit }) => (
+            <span key={t} className={hit ? 'kw kw-hit' : 'kw'}>
               {t}
             </span>
           ))}
-          {hits.length > 3 && <span className="cell-muted">+{hits.length - 3}</span>}
+          {all.length > 3 && <span className="cell-muted">+{all.length - 3}</span>}
         </span>
       ) : (
         muted()
@@ -629,6 +651,7 @@ const RUN_LABEL: Record<RunKind, string> = {
   phone: 'Find phone numbers with Apollo',
   hq: 'Find company HQ',
   research: 'Research companies: website, job board, verified facts',
+  web: 'Search people on the web: profile, keywords, location',
 }
 
 function ColumnHead({ def, rows, ctx }: { def: ColumnDef; rows: Contact[]; ctx: CellContext }) {
@@ -683,7 +706,7 @@ export function buildColumns(visible: ColumnKey[], rows: Contact[], ctx: CellCon
     title: <ColumnHead def={def} rows={rows} ctx={ctx} />,
     width: def.width,
     fixed: i === 0 ? ('left' as const) : undefined,
-    ellipsis: ['title', 'company', 'tags', 'aiReason', 'email', 'industry', 'companySize', 'research'].includes(def.key)
+    ellipsis: ['title', 'company', 'tags', 'aiReason', 'email', 'industry', 'companySize', 'research', 'web'].includes(def.key)
       ? { showTitle: true }
       : undefined,
     render: (_: unknown, c: Contact) => def.render(c, ctx),

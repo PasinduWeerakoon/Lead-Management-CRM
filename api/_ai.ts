@@ -8,6 +8,7 @@ import { dailyCapUsd, spendDay, spendStore } from './_spend.js'
  * forwards it, and counts the cost against a daily limit (AI_DAILY_CAP_USD, default $10).
  *
  *   POST /api/ai?op=chat    → OpenAI /chat/completions
+ *   POST /api/ai?op=search  → OpenAI /responses with web search (person research)
  *   GET  /api/ai?op=models  → OpenAI /models (used to check the setup)
  *
  * Only built-in OpenAI models with known prices are allowed, so every call can be costed, and a call
@@ -17,6 +18,13 @@ import { dailyCapUsd, spendDay, spendStore } from './_spend.js'
 const OPENAI = 'https://api.openai.com/v1'
 const MAX_BODY = 1_500_000
 const MAX_OUTPUT = 16_000
+/** Web search: at most this many searches per request, each billed as a tool call. */
+export const MAX_SEARCHES = 2
+/** OpenAI's web search tool fee per call (list price, Oct 2026); search results are billed as input tokens on top. */
+export const WEB_SEARCH_USD = 0.01
+/** Search results added to the prompt, per search (worst case, for the up-front limit check). */
+const SEARCH_TOKENS = 15_000
+const MAX_SEARCH_OUTPUT = 4_000
 
 export const companyAiConfigured = () => !!process.env.OPENAI_API_KEY?.trim()
 
@@ -52,7 +60,7 @@ export async function handleAi(request: Request, fetchImpl: typeof fetch = fetch
     // Only the models this endpoint will run, so the app never offers one it would refuse.
     return json(200, { data: [...MODELS.keys()].map((id) => ({ id })) })
   }
-  if (op !== 'chat' || request.method !== 'POST') return json(404, { error: 'Not found.' })
+  if ((op !== 'chat' && op !== 'search') || request.method !== 'POST') return json(404, { error: 'Not found.' })
 
   const raw = await request.text()
   if (raw.length > MAX_BODY) return json(413, { error: 'The request is too large.' })
@@ -64,29 +72,48 @@ export async function handleAi(request: Request, fetchImpl: typeof fetch = fetch
   }
   const model = MODELS.get(String(body.model))
   if (!model) return json(400, { error: 'That model can’t be used with the company key. Pick a GPT model.' })
-  if (!Array.isArray(body.messages)) return json(400, { error: 'Missing messages.' })
+  const search = op === 'search'
+  if (search ? typeof body.input !== 'string' || !body.text : !Array.isArray(body.messages))
+    return json(400, { error: search ? 'Missing input.' : 'Missing messages.' })
 
-  const maxOut = Math.min(Number(body.max_completion_tokens) || MAX_OUTPUT, MAX_OUTPUT, model.maxOutput)
-  // Only the fields the app uses are forwarded.
-  const forward = {
-    model: model.id,
-    messages: body.messages,
-    ...(body.response_format ? { response_format: body.response_format } : {}),
-    ...(body.reasoning_effort ? { reasoning_effort: body.reasoning_effort } : {}),
-    max_completion_tokens: maxOut,
-  }
+  // Only the fields the app uses are forwarded; web search is always limited to MAX_SEARCHES.
+  const maxOut = search
+    ? Math.min(Number(body.max_output_tokens) || MAX_SEARCH_OUTPUT, MAX_SEARCH_OUTPUT)
+    : Math.min(Number(body.max_completion_tokens) || MAX_OUTPUT, MAX_OUTPUT, model.maxOutput)
+  const forward = search
+    ? {
+        model: model.id,
+        ...(typeof body.instructions === 'string' ? { instructions: body.instructions } : {}),
+        input: body.input,
+        text: body.text,
+        tools: [{ type: 'web_search' }],
+        max_tool_calls: MAX_SEARCHES,
+        include: ['web_search_call.action.sources'],
+        ...(body.reasoning ? { reasoning: body.reasoning } : {}),
+        max_output_tokens: maxOut,
+      }
+    : {
+        model: model.id,
+        messages: body.messages,
+        ...(body.response_format ? { response_format: body.response_format } : {}),
+        ...(body.reasoning_effort ? { reasoning_effort: body.reasoning_effort } : {}),
+        max_completion_tokens: maxOut,
+      }
 
   const store = spendStore()
   const day = spendDay()
   const cap = dailyCapUsd()
   const spent = await store.get(day)
   // Worst case: ~3 characters per input token, every output token used.
-  const worst = ((raw.length / 3) * model.inputPerM + maxOut * model.outputPerM) / 1_000_000
+  const searchIn = search ? MAX_SEARCHES * SEARCH_TOKENS : 0
+  const worst =
+    ((raw.length / 3 + searchIn) * model.inputPerM + maxOut * model.outputPerM) / 1_000_000 +
+    (search ? MAX_SEARCHES * WEB_SEARCH_USD : 0)
   if (spent + worst > cap) return capReached(spent, cap)
 
   let res: Response
   try {
-    res = await fetchImpl(`${OPENAI}/chat/completions`, {
+    res = await fetchImpl(`${OPENAI}${search ? '/responses' : '/chat/completions'}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...auth },
       body: JSON.stringify(forward),
@@ -99,8 +126,15 @@ export async function handleAi(request: Request, fetchImpl: typeof fetch = fetch
   let spentNow = spent
   if (res.ok) {
     try {
-      const u = (JSON.parse(text) as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage
-      const cost = ((u?.prompt_tokens ?? 0) * model.inputPerM + (u?.completion_tokens ?? 0) * model.outputPerM) / 1e6
+      const data = JSON.parse(text) as {
+        usage?: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number }
+        output?: { type?: string }[]
+      }
+      const u = data.usage
+      const tokensIn = u?.prompt_tokens ?? u?.input_tokens ?? 0
+      const tokensOut = u?.completion_tokens ?? u?.output_tokens ?? 0
+      const searches = data.output?.filter((o) => o.type === 'web_search_call').length ?? 0
+      const cost = (tokensIn * model.inputPerM + tokensOut * model.outputPerM) / 1e6 + searches * WEB_SEARCH_USD
       if (cost > 0) spentNow = await store.add(day, cost)
     } catch {
       // Unreadable answer: the app reports it; nothing to count.

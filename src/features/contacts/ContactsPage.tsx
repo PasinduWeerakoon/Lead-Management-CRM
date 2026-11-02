@@ -21,7 +21,7 @@ import { SENIORITIES } from '../../lib/schemas'
 import { compileFilter, countConditions, highlightRegex, positiveTerms } from '../../lib/filters/engine'
 import { describeFilter } from '../../lib/filters/describe'
 import { updateContact } from '../../lib/contacts'
-import { emptyFilter, type FieldKey, type KeywordPack } from '../../lib/filters/schema'
+import { emptyFilter, type FieldKey, type FilterGroup, type KeywordPack } from '../../lib/filters/schema'
 import { TopBar } from '../../components/TopBar'
 import { BulkBar } from './BulkBar'
 import { ExportModal } from './ExportModal'
@@ -40,12 +40,27 @@ import { ScoreModal } from '../ai/ScoreModal'
 import { HqModal } from '../ai/HqModal'
 import { EnrichRunModal } from '../enrich/EnrichRunModal'
 import { ResearchModal } from '../enrich/ResearchModal'
+import { PersonWebModal } from '../enrich/PersonWebModal'
 
 const SEARCH_ID = 'contact-search'
 const VIRTUAL_FROM = 600
 
 const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 }
 const priorityRank = (c: Contact) => PRIORITY_RANK[c.priority ?? ''] ?? 3
+
+const LOCATION_FIELDS = new Set(['location', 'companyHq', 'anyLocation'])
+
+/** Why the list is empty, in plain words, with a way forward. */
+function emptyFilterHint(draft: FilterGroup, count: number): string {
+  const byLocation = draft.items.some((i) => i.kind === 'condition' && LOCATION_FIELDS.has(i.field))
+  if (byLocation)
+    return 'No one matches. LinkedIn exports have no locations, so fill them first: press ▶ on the Location, Company HQ or Web research column, then filter again.'
+  return count === 1
+    ? 'No one matches this filter. Try a different value or remove it.'
+    : `No one matches these ${count} filters. Try removing one, or switch an “and” to “or”.`
+}
+
+const isAiPriority = (i: FilterGroup['items'][number]) => i.kind === 'condition' && i.field === 'aiPriority'
 
 type SortKey = 'name' | 'aiScore' | 'recent' | 'priority' | 'seniority' | 'company'
 const SORTS: Record<SortKey, { label: string; cmp: (a: Contact, b: Contact) => number }> = {
@@ -133,8 +148,10 @@ export function ContactsPage() {
   const [findingHq, setFindingHq] = useState(false)
   const [enrichRun, setEnrichRun] = useState<{ kind: 'apollo' | 'phone' }>()
   const [researching, setResearching] = useState(false)
+  const [searchingWeb, setSearchingWeb] = useState(false)
   const runColumn = useCallback((kind: RunKind) => {
     if (kind === 'research') setResearching(true)
+    else if (kind === 'web') setSearchingWeb(true)
     else if (kind === 'hq') setFindingHq(true)
     else setEnrichRun({ kind })
   }, [])
@@ -236,6 +253,20 @@ export function ContactsPage() {
     const list = contacts.filter((c) => (!predicate || predicate(c)) && (!deferredQuery || matches(c, deferredQuery)))
     return list.sort((a, b) => SORTS[sort].cmp(a, b) || a.fullName.localeCompare(b.fullName))
   }, [contacts, predicate, deferredQuery, sort])
+
+  // Scoring ignores "AI priority" filters: after "Show High" the list holds only the last run's High
+  // people, and scoring again (e.g. with another brief) must cover everyone the other filters match.
+  const scoreDraft = useMemo(
+    () => ({ ...deferredDraft, items: deferredDraft.items.filter((i) => !isAiPriority(i)) }),
+    [deferredDraft],
+  )
+  const scorePredicate = useMemo(() => compileFilter(scoreDraft, filterCtx), [scoreDraft, filterCtx])
+  const scoreRows = useMemo(() => {
+    if (scoreDraft.items.length === deferredDraft.items.length) return rows
+    return (contacts ?? [])
+      .filter((c) => (!scorePredicate || scorePredicate(c)) && (!deferredQuery || matches(c, deferredQuery)))
+      .sort((a, b) => SORTS[sort].cmp(a, b) || a.fullName.localeCompare(b.fullName))
+  }, [rows, contacts, scoreDraft, deferredDraft, scorePredicate, deferredQuery, sort])
 
   // Selection only counts people still visible, so changing filters never acts on hidden rows.
   const selectedRows = useMemo(() => {
@@ -445,7 +476,7 @@ export function ContactsPage() {
             </Tooltip>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <PresetsButton />
           <AskAiButton packs={packs} />
           <Button type="primary" icon={<BulbOutlined />} onClick={() => setScoring(true)} disabled={rows.length === 0}>
@@ -499,7 +530,7 @@ export function ContactsPage() {
                   description={
                     deferredQuery
                       ? `No one matches “${query.trim()}”. Try a company or a shorter word.`
-                      : `No one matches these ${conditionCount} filters. Try removing one, or switch an “and” to “or”.`
+                      : emptyFilterHint(draft, conditionCount)
                   }
                 />
               ),
@@ -548,6 +579,7 @@ export function ContactsPage() {
       {findingHq && <HqModal shown={rows} selected={selectedRows} all={contacts} onClose={() => setFindingHq(false)} />}
 
       {researching && <ResearchModal shown={rows} selected={selectedRows} onClose={() => setResearching(false)} />}
+      {searchingWeb && <PersonWebModal shown={rows} selected={selectedRows} onClose={() => setSearchingWeb(false)} />}
 
       {enrichRun && (
         <EnrichRunModal
@@ -560,7 +592,7 @@ export function ContactsPage() {
 
       {showScore && (
         <ScoreModal
-          shown={rows}
+          shown={scoreRows}
           selected={selectedRows}
           onClose={closeScore}
           onShowHigh={() => {
@@ -571,7 +603,8 @@ export function ContactsPage() {
               op: 'any_of' as const,
               value: ['High'],
             }
-            load({ combinator: 'and', items: [...draft.items, cond] }, viewId)
+            // Replace an earlier "AI priority" filter rather than stacking another one.
+            load({ combinator: 'and', items: [...draft.items.filter((i) => !isAiPriority(i)), cond] }, viewId)
             setSort('aiScore')
           }}
         />
