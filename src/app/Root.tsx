@@ -18,6 +18,7 @@ import { EnrichPage } from '../features/enrich/EnrichPage'
 import { PresetsPage } from '../features/settings/PresetsPage'
 import { BriefsPage } from '../features/settings/BriefsPage'
 import { AccuracyPage } from '../features/settings/AccuracyPage'
+import { ResultsPage } from '../features/ai/ResultsPage'
 
 function useSystemDark() {
   const query = '(prefers-color-scheme: dark)'
@@ -66,6 +67,7 @@ export function Root() {
           <Layout.Content style={{ minWidth: 0, overflow: 'hidden' }}>
             <Routes>
               <Route path="/" element={<ContactsPage />} />
+              <Route path="/results" element={<ResultsPage />} />
               <Route path="/import" element={<ImportPage />} />
               <Route path="/enrich" element={<EnrichPage />} />
               <Route path="/settings" element={<SettingsPage />} />

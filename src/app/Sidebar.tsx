@@ -168,6 +168,7 @@ export function Sidebar() {
                 </span>
               ),
             },
+            { key: '/results', icon: <BulbOutlined />, label: 'AI results' },
             { key: '/import', icon: <CloudUploadOutlined />, label: 'Import' },
             { key: '/enrich', icon: <BankOutlined />, label: 'Company data' },
           ])}

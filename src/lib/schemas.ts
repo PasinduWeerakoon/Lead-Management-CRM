@@ -224,6 +224,30 @@ export const BriefSchema = z.object({
 })
 export type Brief = z.infer<typeof BriefSchema>
 
+/** One "Score with AI" run, kept as it was: later runs never change it. */
+export const ScoreRunSchema = z.object({
+  id: z.string(),
+  briefId: z.string(),
+  briefName: z.string().max(80),
+  briefText: z.string().max(4000),
+  model: z.string().max(60),
+  at: z.string(),
+  /** People in the list that was scored. */
+  total: z.number().int().nonnegative(),
+  people: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      position: z.string().optional(),
+      company: z.string().optional(),
+      score: z.number(),
+      priority: z.enum(PRIORITIES),
+      reason: z.string(),
+    }),
+  ),
+})
+export type ScoreRun = z.infer<typeof ScoreRunSchema>
+
 export const ImportRecordSchema = z.object({
   id: z.string(),
   fileName: z.string().max(300),

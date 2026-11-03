@@ -1,5 +1,5 @@
 import { db } from '../db'
-import type { AiAssessment, Brief, Contact } from '../schemas'
+import type { AiAssessment, Brief, Contact, ScoreRun } from '../schemas'
 import { AiError, scoreBatch } from './provider'
 import type { Effort } from './models'
 import { recordUsage } from './settings'
@@ -53,6 +53,16 @@ export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
     warnings: [],
   }
   opts.onProgress({ ...summary })
+  const run: ScoreRun = {
+    id: crypto.randomUUID(),
+    briefId: opts.brief.id,
+    briefName: opts.brief.name,
+    briefText: opts.brief.text,
+    model: opts.model,
+    at: new Date().toISOString(),
+    total: people.length,
+    people: [],
+  }
 
   const scoreGroup = async (group: Contact[]): Promise<Contact[]> => {
     await opts.beforeBatch?.()
@@ -71,6 +81,7 @@ export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
     const checked = validateBatch(res.output, entries, opts.brief, res.servedBy)
     summary.droppedClaims += checked.droppedClaims
     await saveAssessments(checked.results)
+    await saveRun(run, group, checked.results)
     summary.scored += checked.results.size
     return entries.filter((e) => checked.missing.includes(e.ref)).map((e) => e.contact)
   }
@@ -98,6 +109,24 @@ export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
     opts.onProgress({ ...summary })
   }
   return summary
+}
+
+/** Adds a batch to this run's saved results (Results page). */
+async function saveRun(run: ScoreRun, group: Contact[], results: Map<string, AiAssessment>) {
+  for (const c of group) {
+    const a = results.get(c.id)
+    if (!a) continue
+    run.people.push({
+      id: c.id,
+      name: c.fullName,
+      position: c.position,
+      company: c.company,
+      score: a.score,
+      priority: a.priority,
+      reason: a.reason,
+    })
+  }
+  if (run.people.length) await db.scoreRuns.put(run)
 }
 
 async function saveAssessments(results: Map<string, AiAssessment>) {
