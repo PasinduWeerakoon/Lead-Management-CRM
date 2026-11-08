@@ -180,6 +180,18 @@ export const ContactSchema = z.object({
       location: z.string().max(200).optional(),
       /** Skills, industries, technologies and topics the person is known for. */
       keywords: z.array(z.string().max(60)).max(15).optional(),
+      /** Current and past employers the pages mention. */
+      career: z
+        .array(
+          z.object({
+            company: z.string().max(120),
+            role: z.string().max(120).optional(),
+            years: z.string().max(40).optional(),
+            url: z.string().max(500),
+          }),
+        )
+        .max(10)
+        .optional(),
       facts: z.array(z.object({ text: z.string().max(300), url: z.string().max(500) })).max(8).optional(),
       sources: z.array(z.string().max(500)).max(10).optional(),
       note: z.string().max(300).optional(),

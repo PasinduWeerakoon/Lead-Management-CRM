@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { validateWeb, webUserMessage, type WebOutput } from '../src/lib/research/person'
+import { mergeResearch, validateCompanyWeb, type CompanyWebOutput } from '../src/lib/research/company-web'
 import { toScoringRow } from '../src/lib/ai/scoring'
 import { keywordMatcher } from '../src/lib/keywords'
 import { handleAi, WEB_SEARCH_USD } from '../api/_ai'
@@ -27,6 +28,15 @@ const out = (o: Partial<WebOutput> = {}): WebOutput => ({
   match: 'confident',
   summary: 'CEO of Example Holdings, leading its digital transformation.',
   location: { value: 'Colombo, Sri Lanka', url: 'https://example.com/team' },
+  career: [
+    {
+      company: 'Cambridge Technology Partners',
+      role: 'Consultant',
+      years: '1999–2003',
+      url: 'https://example.com/team',
+    },
+    { company: 'Invented Co', role: null, years: null, url: 'https://made-up.example.net/' },
+  ],
   keywords: ['Digital transformation', 'Fintech', 'digital transformation'],
   facts: [
     { text: 'Leads Example Holdings as CEO since 2019.', url: 'https://example.com/team' },
@@ -136,5 +146,69 @@ describe('/api/ai?op=search', () => {
 
   it('rejects a search without input', async () => {
     expect((await handleAi(req({ model: 'gpt-6-luna' }), vi.fn())).status).toBe(400)
+  })
+})
+
+describe('past employers', () => {
+  it('keeps employers backed by a returned page and feeds scoring', () => {
+    const web = validateWeb(out(), sources, 'gpt-6-luna')
+    expect(web.career?.map((j) => j.company)).toEqual(['Cambridge Technology Partners'])
+    expect(toScoringRow({ ...person, web }, 'r1').person_career).toBe(
+      'Cambridge Technology Partners, Consultant, 1999–2003',
+    )
+    expect(keywordMatcher(['Cambridge Technology Partners'])({ ...person, web })).toEqual([
+      'Cambridge Technology Partners',
+    ])
+  })
+})
+
+describe('company web search', () => {
+  const company = (o: Partial<CompanyWebOutput> = {}): CompanyWebOutput => ({
+    found: true,
+    website: 'https://www.example.lk/',
+    hq: { value: 'Colombo, Sri Lanka', url: 'https://example.lk/contact' },
+    industry: { value: 'Software services', url: 'https://example.lk/' },
+    size: null,
+    technologies: [{ name: 'AWS', url: 'https://example.lk/' }],
+    hiring: [
+      { title: 'Senior Full Stack Engineer', url: 'https://jobs.example.org/123', location: 'Colombo', postedAt: null },
+      { title: 'QA Engineer', url: 'https://www.linkedin.com/jobs/view/1', location: null, postedAt: null },
+      { title: 'DevOps Engineer', url: 'https://made-up.example.net/job', location: null, postedAt: null },
+    ],
+    summary: 'Builds software for banks.',
+    ...o,
+  })
+  const found = [
+    'https://example.lk/contact',
+    'https://example.lk',
+    'https://jobs.example.org/123',
+    'https://www.linkedin.com/jobs/view/1',
+  ]
+
+  it('keeps only backed facts and never LinkedIn jobs', () => {
+    const r = validateCompanyWeb(company(), found)!
+    expect(r.domain).toBe('example.lk')
+    expect(r.hq?.value).toBe('Colombo, Sri Lanka')
+    expect(r.hiring?.map((j) => j.title)).toEqual(['Senior Full Stack Engineer'])
+    expect(r.technologies?.map((t) => t.name)).toEqual(['AWS'])
+  })
+
+  it('returns nothing when the company is not found', () => {
+    expect(validateCompanyWeb(company({ found: false }), found)).toBeUndefined()
+  })
+
+  it('lets site facts win and adds new roles from the web', () => {
+    const web = validateCompanyWeb(company(), found)!
+    const merged = mergeResearch(
+      {
+        domain: 'example.lk',
+        hq: { value: 'Kandy', url: 'https://example.lk/a', quote: 'Kandy' },
+        hiring: [{ title: 'QA Lead' }],
+      },
+      web,
+    )
+    expect(merged.hq?.value).toBe('Kandy')
+    expect(merged.industry?.value).toBe('Software services')
+    expect(merged.hiring?.map((j) => j.title)).toEqual(['QA Lead', 'Senior Full Stack Engineer'])
   })
 })

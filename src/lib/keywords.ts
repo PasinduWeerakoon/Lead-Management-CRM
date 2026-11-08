@@ -24,6 +24,7 @@ export function keywordMatcher(terms: string[]): (c: Contact) => string[] {
       c.web?.summary,
       c.web?.keywords?.join(', '),
       c.web?.facts?.map((f) => f.text).join('\n'),
+      c.web?.career?.map((j) => `${j.company} ${j.role ?? ''}`).join('\n'),
     ]
       .filter(Boolean)
       .join('\n')

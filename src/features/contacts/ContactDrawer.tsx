@@ -289,6 +289,21 @@ function WebBlock({ contact }: { contact: Contact }) {
               <span style={{ color: 'var(--text-2)' }}>Based in:</span> {w.location}
             </div>
           )}
+          {!!w.career?.length && (
+            <div style={{ fontSize: 13 }}>
+              <span style={{ color: 'var(--text-2)' }}>Worked at:</span>
+              {w.career.map((j) => (
+                <div key={j.company} style={{ paddingLeft: 10 }}>
+                  {j.company}
+                  {j.role ? `, ${j.role}` : ''}
+                  {j.years ? ` (${j.years})` : ''}{' '}
+                  <a href={j.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
+                    source
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
           {w.facts?.map((f) => (
             <div key={f.url + f.text} style={{ fontSize: 13 }}>
               {f.text}{' '}

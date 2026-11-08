@@ -5,13 +5,8 @@ import { WorldOutlined } from '../../components/icons'
 import { db } from '../../lib/db'
 import type { Brief, Contact } from '../../lib/schemas'
 import { formatUsd, modelById, priceKnown, PROVIDERS } from '../../lib/ai/models'
-import {
-  MAX_COMPANIES_PER_RUN,
-  planResearch,
-  runResearch,
-  type ResearchProgress,
-  type ResearchSummary,
-} from '../../lib/research/run'
+import { estimateWebCost } from '../../lib/research/person'
+import { planResearch, runResearch, type ResearchProgress, type ResearchSummary } from '../../lib/research/run'
 import { runScoring, type ScoringSummary } from '../../lib/ai/run-scoring'
 import { checkBudget, useAi } from '../ai/store'
 import { ModelPicker } from '../ai/ModelPicker'
@@ -45,11 +40,16 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
 
   const pool = scope === 'selected' && selected.length ? selected : shown
   const plan = useMemo(() => planResearch(pool, redo), [pool, redo])
-  const companies = plan.companies.slice(0, MAX_COMPANIES_PER_RUN)
+  const companies = plan.companies
+  const isGpt = settings.provider === 'openai'
+  const [useWeb, setUseWeb] = useState(true)
+  const web = isGpt && useWeb
   const alreadyDone = pool.filter((c) => c.research).length
   const model = modelById(settings.model)
+  const webCost = web ? estimateWebCost(companies.length) : { low: 0, high: 0 }
   const estimate =
-    (companies.length * (IN_PER_COMPANY * model.inputPerM + OUT_PER_COMPANY * model.outputPerM)) / 1_000_000
+    (companies.length * (IN_PER_COMPANY * model.inputPerM + OUT_PER_COMPANY * model.outputPerM)) / 1_000_000 +
+    webCost.high * 0.6
 
   const start = async () => {
     if (!key) return
@@ -64,6 +64,7 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
       signal: abort.current.signal,
       onProgress: setProgress,
       beforeCall: checkBudget,
+      ...(web ? { web: { provider: settings.provider } } : {}),
     })
     setSummary(result)
     const brief = briefs.find((b) => b.id === briefId)
@@ -145,9 +146,10 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
         <Flex vertical gap={16} style={{ marginTop: 8 }}>
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             For each company: find its official website (checked by finding the company’s name on it), read a few public
-            pages and its job board, and keep only facts quoted from those pages — HQ, industry, technologies, relevant
-            open roles and a short summary. Empty fields in the table are filled; nothing you entered is replaced.
-            LinkedIn is never read.
+            pages and its job board, and keep only facts quoted from those pages: HQ, industry, technologies, relevant
+            open roles and a short summary. With web search on, it also searches the web for companies whose site can’t
+            be read and for open roles on job sites, each linked to its page. Empty fields in the table are filled;
+            nothing you entered is replaced. LinkedIn, Indeed and Glassdoor are never used.
           </Typography.Text>
 
           <Flex vertical gap={6}>
@@ -160,6 +162,17 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
             </div>
           )}
           {status === 'locked' && <UnlockForm />}
+
+          <Flex vertical gap={4}>
+            <Checkbox checked={web} disabled={!isGpt} onChange={(e) => setUseWeb(e.target.checked)}>
+              Also search the web (finds far more, about 1–2 cents per company)
+            </Checkbox>
+            {!isGpt && (
+              <Typography.Text type="secondary" style={{ fontSize: 12, paddingLeft: 24 }}>
+                Needs GPT. Choose OpenAI (GPT) under AI assistant.
+              </Typography.Text>
+            )}
+          </Flex>
 
           <Flex vertical gap={6}>
             <Typography.Text strong>Whose companies</Typography.Text>
@@ -216,8 +229,8 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
             <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
               Each company takes roughly 5,000 AI tokens and 10–20 seconds. On a free Groq key (8,000 tokens a minute,
               200,000 a day) that’s about 1–2 companies a minute and ~40 a day — research your shortlist first.
-              {plan.companies.length > MAX_COMPANIES_PER_RUN &&
-                ` Only the first ${MAX_COMPANIES_PER_RUN} companies run per go.`}
+              {web &&
+                ' With web search, four companies run at a time. With the company key, it stops at today’s limit; run it again tomorrow and finished companies are skipped.'}
               {plan.noCompany > 0 && ` ${plan.noCompany.toLocaleString()} people have no company and are skipped.`}
             </Typography.Text>
           </div>

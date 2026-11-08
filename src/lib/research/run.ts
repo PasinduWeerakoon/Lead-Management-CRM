@@ -17,8 +17,8 @@ import {
   validateExtract,
   type CompanyResearch,
 } from './extract'
-
-export const MAX_COMPANIES_PER_RUN = 200
+import { mergeResearch, searchCompany } from './company-web'
+import { WEB_MODEL, WEB_SEARCH_USD } from './person'
 const DOMAIN_BATCH = 20
 const RATE_WAITS_MS = [20_000, 40_000, 60_000]
 
@@ -76,6 +76,11 @@ interface RunOptions {
   signal: AbortSignal
   onProgress: (p: ResearchProgress) => void
   beforeCall?: () => Promise<void>
+  /**
+   * Also search the web (GPT only): finds companies whose site can't be read and open roles the site
+   * doesn't list. Runs a few companies at a time.
+   */
+  web?: { provider: string }
   /** Overridable in tests. */
   waitsMs?: number[]
 }
@@ -125,7 +130,7 @@ async function save(company: ResearchCompany, r: CompanyResearch) {
 
 /** Researches companies one by one; each company's findings are saved as soon as they're ready. */
 export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
-  const companies = opts.companies.slice(0, MAX_COMPANIES_PER_RUN)
+  const companies = opts.companies
   const summary: ResearchSummary = {
     done: 0,
     total: companies.length,
@@ -210,77 +215,116 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
       }
     }
 
-    // 2–3. Read each company's site, then pull out cited facts.
-    for (const company of companies) {
-      if (opts.signal.aborted) {
-        summary.stopped = 'Stopped. Everything researched so far is saved.'
-        break
-      }
-      const at = new Date().toISOString()
-      try {
-        const candidates = company.domain ? [company.domain] : (suggestions.get(company.key) ?? [])
-        let site: SiteResponse | undefined
-        let domain: string | undefined
-        for (const d of candidates) {
-          progress(`Reading ${d}…`)
-          const s = await readSiteRemote(d, company.company, opts.signal)
-          // A website from your own data is trusted; an AI-suggested one must show the company's name.
-          if (s.ok && (company.domain || s.matchesCompany)) {
-            site = s
-            domain = d
-            break
-          }
+    // 2–3. Read each company's site, pull out cited facts, then fill gaps with a web search.
+    const queue = [...companies]
+    let halt: unknown
+    const worker = async () => {
+      while (queue.length && !halt) {
+        if (opts.signal.aborted) {
+          summary.stopped = 'Stopped. Everything researched so far is saved.'
+          return
         }
-        if (!site || !domain) {
+        const company = queue.shift()!
+        try {
+          await researchOne(company, suggestions.get(company.key) ?? [])
+        } catch (err) {
+          if (err instanceof AiError && STOP.has(err.kind)) {
+            halt ??= err
+            return
+          }
+          summary.failed++
           await save(company, {
-            status: 'no_site',
-            note: candidates.length
+            status: 'error',
+            note: (err instanceof Error ? err.message : 'Research failed.').slice(0, 300),
+            at: new Date().toISOString(),
+          })
+        }
+        summary.done++
+        progress()
+      }
+    }
+
+    const researchOne = async (company: ResearchCompany, suggested: string[]) => {
+      const at = new Date().toISOString()
+      const candidates = company.domain ? [company.domain] : suggested
+      let site: SiteResponse | undefined
+      let domain: string | undefined
+      for (const d of candidates) {
+        progress(`Reading ${d}…`)
+        const s = await readSiteRemote(d, company.company, opts.signal)
+        // A website from your own data is trusted; an AI-suggested one must show the company's name.
+        if (s.ok && (company.domain || s.matchesCompany)) {
+          site = s
+          domain = d
+          break
+        }
+      }
+
+      let found: Omit<CompanyResearch, 'status' | 'at'> | undefined
+      if (site && domain) {
+        progress(`Reading what ${company.company} says about itself…`)
+        const out = await ai(
+          EXTRACT_SYSTEM,
+          extractUserMessage(company.company, site.pages, site.jobs),
+          'company_research',
+          EXTRACT_SCHEMA,
+          (v) => ExtractOutput.parse(v),
+          4000,
+        )
+        const { facts, dropped } = validateExtract(out, site.pages, site.jobs)
+        summary.dropped += dropped
+        found = {
+          domain,
+          siteUrl: site.url,
+          verified: !!company.domain || site.matchesCompany,
+          ...Object.fromEntries(
+            Object.entries(facts).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length)),
+          ),
+          jobsTotal: site.jobs.length,
+          model: opts.model.slice(0, 60),
+          ...(site.blocked.length
+            ? { note: `Skipped ${site.blocked.length} page(s) the site asks bots not to read.` }
+            : {}),
+        }
+      }
+
+      // The site alone often misses things: no readable site, or no open roles listed on it.
+      if (opts.web && (!found || !found.hiring?.length || !found.hq || !found.industry)) {
+        progress(`Searching the web for ${company.company}…`)
+        await opts.beforeCall?.()
+        const res = await searchCompany({
+          apiKey: opts.apiKey,
+          provider: opts.web.provider,
+          company: company.company,
+          hint: {
+            domain: domain ?? company.domain,
+            country: company.people.find((p) => p.location?.value)?.location?.value,
+          },
+          signal: opts.signal,
+        })
+        summary.costUsd += (await recordUsage(WEB_MODEL, 'research', res.usage, res.searches * WEB_SEARCH_USD)).costUsd
+        if (res.research) found = mergeResearch(found, res.research)
+      }
+
+      if (!found) {
+        await save(company, {
+          status: 'no_site',
+          note: opts.web
+            ? 'Nothing about this company could be found on its website or the web. Add its website in the lead panel and run research again.'
+            : candidates.length
               ? `No website that clearly belongs to this company could be read (tried ${candidates.join(', ')}). Add the website in the lead panel and run research again.`
               : 'Website unknown. Add it in the lead panel and run research again.',
-            at,
-          })
-          summary.noSite++
-        } else {
-          progress(`Reading what ${company.company} says about itself…`)
-          const out = await ai(
-            EXTRACT_SYSTEM,
-            extractUserMessage(company.company, site.pages, site.jobs),
-            'company_research',
-            EXTRACT_SCHEMA,
-            (v) => ExtractOutput.parse(v),
-            4000,
-          )
-          const { facts, dropped } = validateExtract(out, site.pages, site.jobs)
-          summary.dropped += dropped
-          await save(company, {
-            status: 'found',
-            domain,
-            siteUrl: site.url,
-            verified: !!company.domain || site.matchesCompany,
-            ...Object.fromEntries(
-              Object.entries(facts).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length)),
-            ),
-            jobsTotal: site.jobs.length,
-            model: opts.model.slice(0, 60),
-            ...(site.blocked.length
-              ? { note: `Skipped ${site.blocked.length} page(s) the site asks bots not to read.` }
-              : {}),
-            at,
-          })
-          summary.found++
-        }
-      } catch (err) {
-        if (err instanceof AiError && STOP.has(err.kind)) throw err
-        summary.failed++
-        await save(company, {
-          status: 'error',
-          note: (err instanceof Error ? err.message : 'Research failed.').slice(0, 300),
           at,
         })
+        summary.noSite++
+        return
       }
-      summary.done++
-      progress()
+      await save(company, { status: 'found', ...found, at })
+      summary.found++
     }
+
+    await Promise.all(Array.from({ length: opts.web ? 4 : 1 }, worker))
+    if (halt) throw halt
   } catch (err) {
     const e =
       err instanceof AiError ? err : new AiError(err instanceof Error ? err.message : 'Research failed.', 'other')
