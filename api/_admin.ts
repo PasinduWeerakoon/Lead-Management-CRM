@@ -4,11 +4,15 @@ import { getStore, type DataStore, type UserRecord } from './_store.js'
 
 /**
  * /api/admin, for the super admin only.
- *   GET  ?op=users                     → every account (never the password hash)
+ *   GET  ?op=users                     → every account (never the password hash). The main super admin
+ *                                        (SUPER_ADMIN_EMAIL) is listed only to itself, and nobody can change it.
  *   POST { op: 'set', email, status?, role? } → approve, turn off, or change role
  *   GET  ?op=searches                  → every saved search in every profile, newest first (summary)
  *   GET  ?op=search&profileId=&id=     → one search in full: prompt, conditions and scored people
  */
+
+/** The account in SUPER_ADMIN_EMAIL: hidden from other admins and never changed by them. */
+const mainAdmin = () => process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase() || ''
 
 const publicUser = ({ passwordHash: _h, failedSignIns: _f, ...u }: UserRecord) => (void _h, void _f, u)
 
@@ -35,7 +39,11 @@ export async function handleAdmin(request: Request): Promise<Response> {
   const q = new URL(request.url).searchParams
 
   if (request.method === 'GET' && q.get('op') === 'users')
-    return json(200, { users: (await store.listUsers()).map(publicUser) })
+    return json(200, {
+      users: (await store.listUsers())
+        .filter((u) => u.email !== mainAdmin() || admin.email === mainAdmin())
+        .map(publicUser),
+    })
 
   if (request.method === 'GET' && q.get('op') === 'searches') {
     const profiles = await store.listProfiles()
@@ -79,6 +87,7 @@ export async function handleAdmin(request: Request): Promise<Response> {
     if (body.op !== 'set' || typeof body.email !== 'string') return json(400, { error: 'Unknown action.' })
     const email = body.email.trim().toLowerCase()
     if (email === admin.email) return json(400, { error: 'You can’t change your own account here.' })
+    if (email === mainAdmin()) return json(404, { error: 'No such account.' })
     const user = await store.getUser(email)
     if (!user) return json(404, { error: 'No such account.' })
     const status = body.status

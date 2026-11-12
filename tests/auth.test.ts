@@ -167,3 +167,35 @@ describe('fitting a large search into one database item', () => {
     expect(fitRun({ briefName: 'Small', people: people.slice(0, 2) }).trimmed).toBeUndefined()
   })
 })
+
+describe('the main super admin on the Admin page', () => {
+  beforeEach(() => {
+    process.env.SESSION_SECRET = 'x'.repeat(40)
+    process.env.DATA_STORE = 'memory'
+    process.env.SUPER_ADMIN_EMAIL = ADMIN
+    resetStores()
+  })
+  afterEach(() => {
+    for (const k of ['SESSION_SECRET', 'DATA_STORE', 'SUPER_ADMIN_EMAIL']) delete process.env[k]
+    resetStores()
+  })
+
+  it('is listed only to itself, and another super admin cannot change it', async () => {
+    await signUp(ADMIN)
+    const main = cookieOf(await signIn(ADMIN))
+    await signUp('second@example.com', 'Second Admin')
+    await setAccount(main, { email: 'second@example.com', status: 'active' })
+    await setAccount(main, { email: 'second@example.com', role: 'super_admin' })
+    const second = cookieOf(await signIn('second@example.com'))
+
+    const emails = async (cookie: string) =>
+      (
+        (await (await handleAdmin(as(cookie, '/api/admin?op=users'))).json()) as { users: Array<{ email: string }> }
+      ).users.map((u) => u.email)
+    expect(await emails(main)).toEqual([ADMIN, 'second@example.com'])
+    expect(await emails(second)).toEqual(['second@example.com'])
+    expect((await setAccount(second, { email: ADMIN, status: 'disabled' })).status).toBe(404)
+    expect((await setAccount(second, { email: ADMIN, role: 'user' })).status).toBe(404)
+    expect((await readSession(as(main, '/')))?.role).toBe('super_admin')
+  })
+})
