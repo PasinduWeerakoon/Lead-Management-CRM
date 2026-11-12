@@ -45,7 +45,7 @@ and set `OPENAI_API_KEY` (and optionally `MONGODB_URI`, `MONGODB_DB`, and `APP_A
 ## Getting your LinkedIn data
 
 LinkedIn → **Me → Settings & Privacy → Data privacy → Download your data** → tick **Connections** under *Select the data files you're most interested in* — or, if Connections isn't listed for your account, choose **Download larger data archive** (it includes connections) → **Request archive**. The email arrives in ~10 minutes for Connections only, or up to 24 hours for the larger archive; then return to the same page and click **Download archive** and use `Connections.csv` from the zip.
-Unzip the archive and import `Connections.csv`. You can also click **Try with sample data** on the Import page.
+Unzip the archive and import `Connections.csv`.
 
 ## What's in Phase 1
 

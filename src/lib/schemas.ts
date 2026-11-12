@@ -14,7 +14,7 @@ export const FUNCTIONS = [
   'Other',
 ] as const
 export const STATUSES = ['new', 'shortlisted', 'contacted', 'not_a_fit'] as const
-export const SOURCES = ['linkedin_export', 'manual', 'sales_nav', 'sample'] as const
+export const SOURCES = ['linkedin_export', 'manual', 'sales_nav'] as const
 export const PRIORITIES = ['High', 'Medium', 'Low'] as const
 
 export type Seniority = (typeof SENIORITIES)[number]

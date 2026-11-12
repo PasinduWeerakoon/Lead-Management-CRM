@@ -19,13 +19,7 @@ import {
 } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
-import {
-  BankOutlined,
-  CheckCircleFilled,
-  ExperimentOutlined,
-  InboxOutlined,
-  MinusCircleOutlined,
-} from '../../components/icons'
+import { BankOutlined, CheckCircleFilled, InboxOutlined, MinusCircleOutlined } from '../../components/icons'
 import { TopBar } from '../../components/TopBar'
 import { PageHeader } from '../../components/PageHeader'
 import type { ParsedTable } from '../../lib/csv'
@@ -146,20 +140,6 @@ export function EnrichPage() {
                       company size, company HQ, location. Company-only rows update everyone at that company.
                     </Typography.Text>
                   </Upload.Dragger>
-                  {contacts.some((c) => c.source === 'sample') && (
-                    <Flex align="center" gap={8} wrap>
-                      <Typography.Text type="secondary">Using the sample people?</Typography.Text>
-                      <Button
-                        icon={<ExperimentOutlined />}
-                        onClick={async () => {
-                          const res = await fetch('/sample-company-data.csv')
-                          await load(new File([await res.blob()], 'sample-company-data.csv', { type: 'text/csv' }))
-                        }}
-                      >
-                        Try sample company data
-                      </Button>
-                    </Flex>
-                  )}
                 </Flex>
               </Spin>
             )}

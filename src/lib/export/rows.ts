@@ -49,7 +49,7 @@ const STATUS_LABEL: Record<Contact['status'], string> = {
 }
 
 function degree(c: Contact): string {
-  if (c.source === 'linkedin_export' || c.source === 'sample') return '1st'
+  if (c.source === 'linkedin_export') return '1st'
   if (c.source === 'sales_nav') return '2nd'
   return ''
 }

@@ -155,7 +155,6 @@ export const FIELDS: FieldDef[] = [
       linkedin_export: 'LinkedIn export',
       manual: 'Added by hand',
       sales_nav: 'Sales Navigator',
-      sample: 'Sample data',
     }),
   },
   {

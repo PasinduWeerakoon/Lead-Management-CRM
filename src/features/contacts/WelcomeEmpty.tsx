@@ -1,5 +1,5 @@
 import { Button, Flex, Typography } from 'antd'
-import { CloudUploadOutlined, ExperimentOutlined, UserOutlined } from '../../components/icons'
+import { CloudUploadOutlined, UserOutlined } from '../../components/icons'
 import { useNavigate } from 'react-router-dom'
 import { TopBar } from '../../components/TopBar'
 
@@ -70,9 +70,6 @@ export function WelcomeEmpty() {
           <Flex gap={8}>
             <Button type="primary" icon={<CloudUploadOutlined />} onClick={() => navigate('/import')}>
               Import connections
-            </Button>
-            <Button icon={<ExperimentOutlined />} onClick={() => navigate('/import?sample=1')}>
-              Try sample data
             </Button>
           </Flex>
         </Flex>
