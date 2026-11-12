@@ -45,8 +45,14 @@ export async function fetchCompanyExtras(
   name: string,
   domain: string | undefined,
   signal?: AbortSignal,
+  opts: { jobs?: boolean } = {},
 ): Promise<CompanyExtras | undefined> {
-  const q = new URLSearchParams({ op: 'company', name, ...(domain ? { domain } : {}) })
+  const q = new URLSearchParams({
+    op: 'company',
+    name,
+    ...(domain ? { domain } : {}),
+    ...(opts.jobs === false ? { jobs: '0' } : {}),
+  })
   const res = await fetch(`/api/sources?${q}`, { signal }).catch(() => undefined)
   return res?.ok ? ((await res.json()) as CompanyExtras) : undefined
 }

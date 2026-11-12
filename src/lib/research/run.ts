@@ -368,6 +368,12 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
             progress(`${company.company}: website could not be read, keeping the Coresignal record`)
           }
         }
+        // Free official and open records: SEC EDGAR (US filers) and Wikidata. No Coresignal credits.
+        progress(`Checking SEC EDGAR and Wikidata for ${company.company}…`)
+        found = mergeExtras(
+          found,
+          await fetchCompanyExtras(company.company, found?.domain ?? site, opts.signal, { jobs: false }),
+        )
         if (!found) {
           await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
           summary.noSite++
@@ -382,6 +388,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
             found.industry?.value,
             found.hiring?.length ? `${found.hiring.length} open jobs` : 'no open jobs',
             found.technologies?.length ? `${found.technologies.length} technologies` : '',
+            found.registry ? 'SEC record' : '',
             `${credits} credits`,
           ]
             .filter(Boolean)

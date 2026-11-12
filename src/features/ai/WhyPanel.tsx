@@ -81,6 +81,8 @@ export function WhyPanel({ run, people, shortlist }: Props) {
     ? [
         'Coresignal (licensed company records and job posts)',
         'Company websites and careers pages (with their linked job boards)',
+        'SEC EDGAR',
+        'Wikidata',
       ]
     : [
         'Company website',

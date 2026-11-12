@@ -343,7 +343,8 @@ export async function handleSources(request: Request, f: Fetch = fetch): Promise
     const [edgar, wikidata, jobs] = await Promise.all([
       edgarLookup(name, f).catch(() => undefined),
       wikidataLookup(name, domain, f).catch(() => undefined),
-      adzunaJobs(name, country, f).catch(() => []),
+      // jobs=0 skips Adzuna (Coresignal mode gets jobs from Coresignal and careers pages).
+      str('jobs') === '0' ? [] : adzunaJobs(name, country, f).catch(() => []),
     ])
     return json(200, { edgar: edgar ?? null, wikidata: wikidata ?? null, jobs })
   }

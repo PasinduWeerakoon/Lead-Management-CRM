@@ -88,8 +88,8 @@ export function PrivacyPage() {
                   open job posts for their employers. A work email is kept only when Coresignal holds one for that
                   person. Coresignal is a licensed data provider. The tool also reads each employer's own public website
                   and careers pages, and the job boards those pages link to (such as Greenhouse or Lever), and skips any
-                  page the site asks bots not to read. Every fact keeps its source. The tool runs no web or LinkedIn
-                  searches.
+                  page the site asks bots not to read. Company facts are also checked against official and open records
+                  (SEC EDGAR and Wikidata). Every fact keeps its source. The tool runs no web or LinkedIn searches.
                 </>
               ) : (
                 <>

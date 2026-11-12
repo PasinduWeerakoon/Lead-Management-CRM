@@ -66,25 +66,27 @@ export function LimitsSection() {
         </Flex>
       </Card>
 
-      <Card
-        title={CORESIGNAL_ONLY ? 'Free data sources (off while Coresignal is the only source)' : 'Free data sources'}
-        style={{ marginTop: 16 }}
-      >
+      <Card title="Free data sources" style={{ marginTop: 16 }}>
         <Flex vertical gap={8}>
           {[
-            ['SEC EDGAR', 'Official facts for US public companies', true],
-            ['Wikidata', 'Founded, head office, CEO, employees', true],
-            ['GitHub', 'Public repositories and languages', true],
-            ['Adzuna', 'US job listings with salaries (ADZUNA_APP_ID, ADZUNA_APP_KEY)', !!sources?.adzuna],
-            ['Hunter.io', 'Published or verified work emails (HUNTER_API_KEY)', !!sources?.hunter],
-          ].map(([name, note, on]) => (
+            // [name, note, key set, used while CORESIGNAL_ONLY]
+            ['SEC EDGAR', 'Official facts for US public companies', true, true],
+            ['Wikidata', 'Founded, head office, CEO, employees', true, true],
+            ['GitHub', 'Public repositories and languages', true, false],
+            ['Adzuna', 'US job listings with salaries (ADZUNA_APP_ID, ADZUNA_APP_KEY)', !!sources?.adzuna, false],
+            ['Hunter.io', 'Published or verified work emails (HUNTER_API_KEY)', !!sources?.hunter, false],
+          ].map(([name, note, on, withCoresignal]) => (
             <Flex key={String(name)} justify="space-between" gap={12} wrap>
               <span>
                 <b style={{ fontWeight: 500 }}>{name}</b>
                 <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-3)' }}>{note}</span>
               </span>
-              <Typography.Text type={on ? 'success' : 'secondary'}>
-                {CORESIGNAL_ONLY ? 'Off' : on ? 'On' : 'Off · key not set on the server'}
+              <Typography.Text type={on && (!CORESIGNAL_ONLY || withCoresignal) ? 'success' : 'secondary'}>
+                {CORESIGNAL_ONLY && !withCoresignal
+                  ? 'Off while Coresignal is used'
+                  : on
+                    ? 'On'
+                    : 'Off · key not set on the server'}
               </Typography.Text>
             </Flex>
           ))}

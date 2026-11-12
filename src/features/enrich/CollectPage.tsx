@@ -154,7 +154,7 @@ export function CollectPage() {
                   title={CORESIGNAL_ONLY ? 'Company records' : 'Company websites'}
                   note={
                     CORESIGNAL_ONLY
-                      ? 'Coresignal records, plus each company’s own site and careers pages'
+                      ? 'Coresignal records, each company’s own site and careers pages, SEC EDGAR and Wikidata'
                       : "Find and confirm each company's site"
                   }
                   done={s.sitesChecked}
@@ -235,7 +235,7 @@ export function CollectPage() {
 
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>
                 {CORESIGNAL_ONLY
-                  ? 'People and company data comes from Coresignal, a licensed data provider. The app also reads each employer’s own website, careers pages and linked job boards. It runs no web or LinkedIn searches.'
+                  ? 'People and company data comes from Coresignal, a licensed data provider. The app also reads each employer’s own website, careers pages and linked job boards, and checks SEC EDGAR and Wikidata. It runs no web or LinkedIn searches.'
                   : 'Every fact is saved with the page it came from. Public LinkedIn pages are used when a web search finds them. Indeed and Glassdoor are never read.'}
               </p>
             </>
