@@ -7,6 +7,7 @@ import { db } from '../../lib/db'
 import type { Contact } from '../../lib/schemas'
 import { ResearchModal } from './ResearchModal'
 import { PersonWebModal } from './PersonWebModal'
+import { CORESIGNAL_ONLY } from '../../lib/research/coresignal'
 
 /** Per-stage counts of what has been collected so far. */
 export function collectStats(contacts: Contact[]) {
@@ -150,43 +151,62 @@ export function CollectPage() {
                   What has been collected
                 </div>
                 <Stage
-                  title="Company websites"
-                  note="Find and confirm each company's site"
+                  title={CORESIGNAL_ONLY ? 'Company records' : 'Company websites'}
+                  note={
+                    CORESIGNAL_ONLY ? 'Licensed company data from Coresignal' : "Find and confirm each company's site"
+                  }
                   done={s.sitesChecked}
                   total={s.companies}
                   result={`${s.sitesFound.toLocaleString()} found of ${s.companies.toLocaleString()}`}
                 />
                 <Stage
                   title="Open jobs"
-                  note="Careers pages, Greenhouse, Lever, Workable, Ashby"
+                  note={
+                    CORESIGNAL_ONLY
+                      ? 'Open job posts from Coresignal'
+                      : 'Careers pages, Greenhouse, Lever, Workable, Ashby'
+                  }
                   done={s.sitesFound}
                   total={s.companies}
                   result={`${s.jobs.toLocaleString()} jobs at ${s.hiring.toLocaleString()} companies`}
                 />
                 <Stage
                   title="Technologies"
-                  note="From company sites and job ads"
+                  note={
+                    CORESIGNAL_ONLY
+                      ? 'Technologies each company uses, from Coresignal'
+                      : 'From company sites and job ads'
+                  }
                   done={s.sitesFound}
                   total={s.companies}
                   result={`${s.tech.toLocaleString()} companies`}
                 />
-                <Stage
-                  title="LinkedIn job posts"
-                  note="Public job posts and company pages, found by web search"
-                  done={s.liCompaniesChecked}
-                  total={s.companies}
-                  result={`${s.liJobs.toLocaleString()} job posts`}
-                />
-                <Stage
-                  title="LinkedIn profiles"
-                  note="Public profiles, found by web search (never logs in)"
-                  done={s.liPeopleChecked}
-                  total={s.people}
-                  result={`${s.liProfiles.toLocaleString()} profiles found`}
-                />
+                {/* Off in Coresignal mode: its data already includes LinkedIn-sourced profiles and job posts. */}
+                {!CORESIGNAL_ONLY && (
+                  <>
+                    <Stage
+                      title="LinkedIn job posts"
+                      note="Public job posts and company pages, found by web search"
+                      done={s.liCompaniesChecked}
+                      total={s.companies}
+                      result={`${s.liJobs.toLocaleString()} job posts`}
+                    />
+                    <Stage
+                      title="LinkedIn profiles"
+                      note="Public profiles, found by web search (never logs in)"
+                      done={s.liPeopleChecked}
+                      total={s.people}
+                      result={`${s.liProfiles.toLocaleString()} profiles found`}
+                    />
+                  </>
+                )}
                 <Stage
                   title="People's profiles"
-                  note="Work experience, degrees and campus, projects, certifications, skills"
+                  note={
+                    CORESIGNAL_ONLY
+                      ? 'Work history, degrees and campus, certifications, skills, from Coresignal by LinkedIn URL'
+                      : 'Work experience, degrees and campus, projects, certifications, skills'
+                  }
                   done={s.peopleChecked}
                   total={s.people}
                   result={`${s.pastJobsFound.toLocaleString()} people found`}
@@ -212,8 +232,9 @@ export function CollectPage() {
               </div>
 
               <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>
-                Every fact is saved with the page it came from. Public LinkedIn pages are used when a web search finds
-                them. Indeed and Glassdoor are never read.
+                {CORESIGNAL_ONLY
+                  ? 'All web data comes from Coresignal, a licensed data provider. The app reads no websites and runs no web or LinkedIn searches itself.'
+                  : 'Every fact is saved with the page it came from. Public LinkedIn pages are used when a web search finds them. Indeed and Glassdoor are never read.'}
               </p>
             </>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Flex, Progress, Tag } from 'antd'
 import type { Contact, ScoreRun } from '../../lib/schemas'
+import { CORESIGNAL_ONLY } from '../../lib/research/coresignal'
 
 interface Props {
   run: ScoreRun
@@ -61,27 +62,32 @@ export function WhyPanel({ run, people, shortlist }: Props) {
       .then(setKeyed)
       .catch(() => undefined)
   }, [])
-  const personSources = [
-    'Company team and leadership pages',
-    'News and press releases',
-    'Conference, talk and podcast pages',
-    'University and alumni pages',
-    'GitHub',
-    'Google Scholar and ORCID',
-    'Patents',
-    'Personal sites and blogs',
-    'Public LinkedIn profiles (via search)',
-    ...(keyed?.hunter ? ['Hunter.io (work email)'] : []),
-  ]
-  const companySources = [
-    'Company website',
-    'Job boards (Greenhouse, Lever, Workable, Ashby, Workday)',
-    'Web search (news, Crunchbase, partner directories)',
-    'LinkedIn company pages and job posts (via search)',
-    'SEC EDGAR',
-    'Wikidata',
-    ...(keyed?.adzuna ? ['Adzuna jobs'] : []),
-  ]
+  // Coresignal mode has one source; the lists after it are the earlier sources, kept for switching back.
+  const personSources = CORESIGNAL_ONLY
+    ? ['Coresignal (licensed profiles, matched by LinkedIn URL)']
+    : [
+        'Company team and leadership pages',
+        'News and press releases',
+        'Conference, talk and podcast pages',
+        'University and alumni pages',
+        'GitHub',
+        'Google Scholar and ORCID',
+        'Patents',
+        'Personal sites and blogs',
+        'Public LinkedIn profiles (via search)',
+        ...(keyed?.hunter ? ['Hunter.io (work email)'] : []),
+      ]
+  const companySources = CORESIGNAL_ONLY
+    ? ['Coresignal (licensed company records and job posts)']
+    : [
+        'Company website',
+        'Job boards (Greenhouse, Lever, Workable, Ashby, Workday)',
+        'Web search (news, Crunchbase, partner directories)',
+        'LinkedIn company pages and job posts (via search)',
+        'SEC EDGAR',
+        'Wikidata',
+        ...(keyed?.adzuna ? ['Adzuna jobs'] : []),
+      ]
   const notScored = Math.max(0, run.total - run.people.length)
 
   return (
@@ -139,7 +145,9 @@ export function WhyPanel({ run, people, shortlist }: Props) {
       </Flex>
 
       <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        Public LinkedIn pages are included when the web search returns them. Never used: Indeed and Glassdoor.
+        {CORESIGNAL_ONLY
+          ? 'All web data comes from Coresignal. People without a LinkedIn URL in the export can’t be looked up.'
+          : 'Public LinkedIn pages are included when the web search returns them. Never used: Indeed and Glassdoor.'}
       </span>
 
       {missing.length > 0 && (

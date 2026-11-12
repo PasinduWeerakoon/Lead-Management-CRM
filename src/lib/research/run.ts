@@ -3,6 +3,7 @@ import { db } from '../db'
 import type { Contact } from '../schemas'
 import { AiError, structuredCall } from '../ai/provider'
 import { extractModelFor, type Effort } from '../ai/models'
+import { CORESIGNAL_ONLY, fetchCoresignalCompany } from './coresignal'
 import { recordUsage } from '../ai/settings'
 import { readSiteRemote, type SiteResponse } from './api'
 import {
@@ -240,7 +241,8 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
 
   try {
     // 1. Suggest domains for companies whose website isn't known yet (checked by visiting later).
-    const unknown = companies.filter((c) => !c.domain)
+    // Coresignal mode looks companies up by name, so no AI website guessing is needed.
+    const unknown = CORESIGNAL_ONLY ? [] : companies.filter((c) => !c.domain)
     const suggestions = new Map<string, string[]>()
     for (let i = 0; i < unknown.length; i += DOMAIN_BATCH) {
       if (opts.signal.aborted) break
@@ -298,6 +300,32 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
 
     const researchOne = async (company: ResearchCompany, suggested: string[]) => {
       const at = new Date().toISOString()
+
+      // Coresignal only: one licensed company record with its jobs. The old sources below stay
+      // as they were and run again when CORESIGNAL_ONLY is false.
+      if (CORESIGNAL_ONLY) {
+        progress(`Looking up ${company.company} in Coresignal…`)
+        const { research, credits } = await fetchCoresignalCompany(company.company, company.domain, opts.signal)
+        if (!research) {
+          await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
+          summary.noSite++
+          progress(`${company.company}: not found in Coresignal (${credits} credits)`)
+          return
+        }
+        await save(company, { status: 'found', ...splitOwnProducts(company.company, research), at })
+        summary.found++
+        progress(
+          `${company.company}: ${[
+            research.industry?.value,
+            research.hiring?.length ? `${research.jobsTotal ?? research.hiring.length} open jobs` : 'no open jobs',
+            research.technologies?.length ? `${research.technologies.length} technologies` : '',
+            `${credits} credits`,
+          ]
+            .filter(Boolean)
+            .join(', ')}`,
+        )
+        return
+      }
       const candidates = company.domain ? [company.domain] : suggested
       let site: SiteResponse | undefined
       let domain: string | undefined
@@ -393,7 +421,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
       )
     }
 
-    await Promise.all(Array.from({ length: opts.web ? 4 : 1 }, worker))
+    await Promise.all(Array.from({ length: opts.web || CORESIGNAL_ONLY ? 4 : 1 }, worker))
     if (halt) throw halt
   } catch (err) {
     const e =

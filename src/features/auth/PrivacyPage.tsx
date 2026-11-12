@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from './store'
+import { CORESIGNAL_ONLY } from '../../lib/research/coresignal'
 
 /** Fill these in before going live. */
 const LAST_UPDATED = '[DATE]'
@@ -80,11 +81,22 @@ export function PrivacyPage() {
               the Connections.csv file you upload.
             </li>
             <li>
-              <B>Public work information:</B> company websites, open job ads, technologies, and public career history,
-              degrees, projects, certifications and public GitHub profiles found on the open web, plus official and open
-              company records (SEC EDGAR, Wikidata), job listings (company job boards and Adzuna) and work email lookups
-              (Hunter.io). Work email and office phone are kept only when the person or their employer published them on
-              a public page. Each fact keeps a link to where it was found.
+              {CORESIGNAL_ONLY ? (
+                <>
+                  <B>Work information from Coresignal:</B> career history, degrees, certifications and skills for each
+                  connection, matched by the LinkedIn profile link in your file, and company records, technologies and
+                  open job posts for their employers. Coresignal is a licensed data provider. The tool itself reads no
+                  websites and runs no web or LinkedIn searches.
+                </>
+              ) : (
+                <>
+                  <B>Public work information:</B> company websites, open job ads, technologies, and public career
+                  history, degrees, projects, certifications and public GitHub profiles found on the open web, plus
+                  official and open company records (SEC EDGAR, Wikidata), job listings (company job boards and Adzuna)
+                  and work email lookups (Hunter.io). Work email and office phone are kept only when the person or their
+                  employer published them on a public page. Each fact keeps a link to where it was found.
+                </>
+              )}
             </li>
             <li>
               <B>Your notes:</B> status, tags and notes you add, and the searches you run.

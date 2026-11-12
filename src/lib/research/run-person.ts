@@ -4,6 +4,7 @@ import { AiError } from '../ai/provider'
 import { recordUsage } from '../ai/settings'
 import { mergeWeb, searchPerson, WEB_MODEL, WEB_SEARCH_USD, type PersonWeb } from './person'
 import { fetchWorkEmail } from './sources'
+import { CORESIGNAL_ONLY, fetchCoresignalPerson } from './coresignal'
 
 const PARALLEL = 4
 const STOP_KINDS = new Set(['cancelled', 'auth', 'permission', 'model', 'limit', 'network'])
@@ -61,12 +62,35 @@ export async function runWeb(opts: {
       const contact = queue.shift()!
       try {
         await opts.beforeEach?.()
-        const res = await searchPerson({ apiKey: opts.apiKey, provider: opts.provider, contact, signal: opts.signal })
-        const usage = await recordUsage(WEB_MODEL, 'web', res.usage, res.searches * WEB_SEARCH_USD)
-        p.costUsd += usage.costUsd
+        let res: { web: PersonWeb }
+        let credits: number | undefined
+        if (CORESIGNAL_ONLY) {
+          // Coresignal only: one licensed profile, matched by LinkedIn URL. No web search, LinkedIn
+          // search, Hunter or GitHub (that code is below, switched off by CORESIGNAL_ONLY).
+          const cs = await fetchCoresignalPerson(contact, opts.signal)
+          res = cs
+          credits = cs.credits
+        } else {
+          const found = await searchPerson({
+            apiKey: opts.apiKey,
+            provider: opts.provider,
+            contact,
+            signal: opts.signal,
+          })
+          const usage = await recordUsage(WEB_MODEL, 'web', found.usage, found.searches * WEB_SEARCH_USD)
+          p.costUsd += usage.costUsd
+          res = found
+        }
         // Hunter: a published or verified work email, when the web search didn't find one.
         const domain = contact.research?.domain
-        if (res.web.status !== 'error' && !res.web.email && domain && contact.firstName && contact.lastName) {
+        if (
+          !CORESIGNAL_ONLY &&
+          res.web.status !== 'error' &&
+          !res.web.email &&
+          domain &&
+          contact.firstName &&
+          contact.lastName
+        ) {
           const found = await fetchWorkEmail(contact.firstName, contact.lastName, domain, opts.signal)
           if (found)
             res.web = {
@@ -90,8 +114,8 @@ export async function runWeb(opts: {
                 ]
                   .filter(Boolean)
                   .join(', ') || 'profile found'
-              }`
-            : `${contact.fullName}: nothing public found on the web or LinkedIn`
+              }${credits !== undefined ? ` (${credits} credits)` : ''}`
+            : `${contact.fullName}: ${w.note ?? (CORESIGNAL_ONLY ? 'not found in Coresignal' : 'nothing public found on the web or LinkedIn')}`
       } catch (err) {
         const e = err instanceof AiError ? err : new AiError('Unexpected error while searching.', 'other')
         if (STOP_KINDS.has(e.kind)) {

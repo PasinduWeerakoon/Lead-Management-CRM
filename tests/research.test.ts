@@ -1,5 +1,11 @@
 import 'fake-indexeddb/auto'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// These tests cover the earlier sources (site crawl, AI extraction, web search), kept behind the switch.
+vi.mock('../src/lib/research/coresignal', async (orig) => ({
+  ...(await orig<typeof import('../src/lib/research/coresignal')>()),
+  CORESIGNAL_ONLY: false,
+}))
 import {
   assertPublicHost,
   fetchJobs,

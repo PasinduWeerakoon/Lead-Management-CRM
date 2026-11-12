@@ -2,6 +2,7 @@ import type { AnyBulkWriteOperation, Db } from 'mongodb'
 import { createHash } from 'node:crypto'
 import { handleAuth } from './_auth.js'
 import { handleSources } from './_sources.js'
+import { handleCoresignal } from './_coresignal.js'
 import { handleResearch } from './_research.js'
 import { companyAiConfigured, companyAiStatus, handleAi } from './_ai.js'
 import {
@@ -222,6 +223,7 @@ export async function handleData(request: Request, dbOverride?: Db): Promise<Res
 export async function routeApi(path: string, request: Request): Promise<Response | undefined> {
   if (path === '/api/auth') return handleAuth(request)
   if (path === '/api/sources') return handleSources(request)
+  if (path === '/api/coresignal') return handleCoresignal(request)
   if (path === '/api/status') return handleStatus(request)
   if (path === '/api/profiles') return handleProfiles(request)
   if (path === '/api/data') return handleData(request)

@@ -10,6 +10,7 @@ import { checkPrompt } from '../../lib/ai/prompt-check'
 import { PLACEHOLDER_COMPANY, planResearch, runResearch } from '../../lib/research/run'
 import { planWeb, runWeb } from '../../lib/research/run-person'
 import { planLinkedIn, runLinkedInStep } from '../../lib/research/linkedin-step'
+import { CORESIGNAL_ONLY } from '../../lib/research/coresignal'
 import { AiError } from '../../lib/ai/provider'
 import { collectStats } from '../enrich/CollectPage'
 import { checkBudget, useAi } from './store'
@@ -166,13 +167,13 @@ export function NewSearchPage() {
               setRunning({ step: 'companies', done: p.done, total: p.total, note: p.step })
               step('company', p.step)
             },
-            ...(settings.provider === 'openai' ? { web: { provider: settings.provider } } : {}),
+            ...(!CORESIGNAL_ONLY && settings.provider === 'openai' ? { web: { provider: settings.provider } } : {}),
           })
           refreshed.companies = r.done
           if (r.stopped) throw new AiError(r.stopped, 'other')
         }
         const toSearch = planWeb(people.filter(stalePerson), true)
-        if (toSearch.length && settings.provider === 'openai') {
+        if (toSearch.length && (CORESIGNAL_ONLY || settings.provider === 'openai')) {
           setRunning({ step: 'people', done: 0, total: toSearch.length })
           const w = await runWeb({
             apiKey: key,
@@ -191,8 +192,9 @@ export function NewSearchPage() {
       }
 
       // LinkedIn, every time: public job posts for each company and public profiles for each person,
-      // found by web search. Skips what was searched recently.
-      if (settings.provider === 'openai') {
+      // found by web search. Skips what was searched recently. Off in Coresignal mode, which already
+      // has LinkedIn-sourced profiles and job posts under licence.
+      if (!CORESIGNAL_ONLY && settings.provider === 'openai') {
         const fresh0 = (await db.contacts.bulkGet(people.map((c) => c.id))).filter((c): c is Contact => !!c)
         const plan = planLinkedIn(fresh0)
         const total = plan.companies.length + plan.people.length
