@@ -172,9 +172,9 @@ export async function pushTable(t: SyncedTable, profileId = activeProfileId()): 
 /** Brings down changes for one table. Returns how many records were applied. */
 export async function pullTable(t: SyncedTable, profileId = activeProfileId(), serverWins = false): Promise<number> {
   let applied = 0
-  for (;;) {
+  for (let page = 0; ; page++) {
     const state = readState(profileId)
-    const res = await pullRecords(profileId, t, state.pulled[t] ?? 0)
+    const res = await pullRecords(profileId, t, state.pulled[t] ?? 0, page > 0)
     applied += await applyRemote(t, res.records, serverWins ? Infinity : (state.pushed[t] ?? 0))
     const latest = readState(profileId)
     latest.pulled[t] = Math.max(latest.pulled[t] ?? 0, res.cursor)

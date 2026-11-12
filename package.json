@@ -12,7 +12,9 @@
     "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\"",
     "build:lambda": "node scripts/build-lambda.mjs",
-    "deploy": "npm run build && npm run build:lambda && cd infra && npm run deploy"
+    "deploy": "npm run build && npm run build:lambda && cd infra && npm run deploy",
+    "db:local": "docker run --rm -p 8000:8000 amazon/dynamodb-local",
+    "db:create": "node scripts/create-data-table.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",

@@ -22,6 +22,8 @@ export interface LeadsStackProps extends cdk.StackProps {
   openaiApiKey?: string
   /** Daily limit for the company key, in USD. */
   aiDailyCapUsd?: number
+  /** Other server settings passed to the Lambda as they are (Google sign-in, Coresignal, Hunter…). */
+  serverEnv?: Record<string, string>
 }
 
 /**
@@ -29,6 +31,7 @@ export interface LeadsStackProps extends cdk.StackProps {
  *  - the web app is static files in a private S3 bucket, served by CloudFront
  *  - every /api/* route is ONE Arm64 Lambda behind a Function URL (no API Gateway), reachable only
  *    through CloudFront (a secret header the Lambda checks)
+ *  - the shared data is ONE on-demand DynamoDB table (nothing to pay while idle)
  *  - no VPC, no NAT gateway, no always-on servers; logs kept 14 days
  */
 export class LeadsStack extends cdk.Stack {
@@ -55,6 +58,20 @@ export class LeadsStack extends cdk.Stack {
         })
       : undefined
 
+    // Profiles and synced records (see api/_store-dynamo.ts). On-demand and kept if the stack is deleted.
+    const data = new dynamodb.Table(this, 'Data', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    })
+    data.addLocalSecondaryIndex({
+      indexName: 'bySrv',
+      sortKey: { name: 'srv', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
     const api = new lambda.Function(this, 'Api', {
       description: 'Leads /api/* — company research, Apollo forwarding, optional shared database',
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -67,6 +84,8 @@ export class LeadsStack extends cdk.Stack {
       logGroup,
       environment: {
         NODE_ENV: 'production',
+        ...props.serverEnv,
+        DATA_TABLE: data.tableName,
         ...(props.accessKey ? { APP_ACCESS_KEY: props.accessKey } : {}),
         ORIGIN_VERIFY_SECRET: originSecret,
         ...(props.mongodbUri ? { MONGODB_URI: props.mongodbUri, MONGODB_DB: 'leads' } : {}),
@@ -80,6 +99,7 @@ export class LeadsStack extends cdk.Stack {
       },
     })
     spend?.grant(api, 'dynamodb:GetItem', 'dynamodb:UpdateItem')
+    data.grant(api, 'dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:BatchWriteItem')
     const apiUrl = api.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE })
 
     // --- Web app: private bucket ---------------------------------------------------------------
@@ -172,5 +192,6 @@ export class LeadsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AppUrl', { value: `https://${distribution.distributionDomainName}` })
     new cdk.CfnOutput(this, 'BucketName', { value: site.bucketName })
     new cdk.CfnOutput(this, 'ApiFunction', { value: api.functionName })
+    new cdk.CfnOutput(this, 'DataTable', { value: data.tableName })
   }
 }

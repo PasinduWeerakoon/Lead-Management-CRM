@@ -1,26 +1,18 @@
-import type { AnyBulkWriteOperation, Db } from 'mongodb'
+import type { Db } from 'mongodb'
 import { createHash } from 'node:crypto'
 import { handleAuth } from './_auth.js'
 import { handleSources } from './_sources.js'
 import { handleCoresignal } from './_coresignal.js'
 import { handleResearch } from './_research.js'
 import { companyAiConfigured, companyAiStatus, handleAi } from './_ai.js'
-import {
-  checkAccess,
-  databaseConfigured,
-  json,
-  nextStamp,
-  PROFILE_ID,
-  SYNCED_TABLES,
-  withDb,
-  type SyncedTable,
-} from './_db.js'
+import { checkAccess, json, PROFILE_ID, SYNCED_TABLES, type SyncedTable } from './_db.js'
+import { getStore, mongoStore, StoreError, storeConfigured, type DataStore, type RecordWrite } from './_store.js'
 
 /**
- * The shared-database API. Profiles keep their data apart by `profileId`; each record is stored as
- * { _id: "<profile>:<id>", profileId, id, data, srv } where `srv` is the server's write stamp, so
- * browsers can ask for "everything changed since…". Deleted records stay as `deleted: true` markers
- * so other browsers learn about the delete.
+ * The shared-database API. Profiles keep their data apart by `profileId`; each record carries `srv`,
+ * the server's write stamp, so browsers can ask for "everything changed since…". Deleted records stay
+ * as `deleted: true` markers so other browsers learn about the delete. Storage is in _store.ts
+ * (DynamoDB, MongoDB or memory).
  */
 
 const MAX_BODY = 4_000_000
@@ -28,22 +20,6 @@ const MAX_RECORDS = 500
 const PAGE = 1000
 /** Pulls re-read a few seconds back, so writes landing on another server instance at the same moment aren't missed. */
 const OVERLAP_MS = 10_000
-
-interface ProfileDoc {
-  _id: string
-  name: string
-  createdAt: string
-  updatedAt: string
-}
-
-interface RecordDoc {
-  _id: string
-  profileId: string
-  id: string
-  data?: Record<string, unknown>
-  deleted?: boolean
-  srv: number
-}
 
 const isTable = (t: unknown): t is SyncedTable =>
   typeof t === 'string' && (SYNCED_TABLES as readonly string[]).includes(t)
@@ -75,7 +51,7 @@ export async function handleStatus(request: Request): Promise<Response> {
   // Only told to people with the access code; never includes the key.
   if (!denied && companyAiConfigured()) companyAi = await companyAiStatus().catch(() => undefined)
   return json(200, {
-    database: databaseConfigured(),
+    database: storeConfigured(),
     accessRequired: false,
     accessOk: !denied,
     // A short fingerprint of the server's code, so a mismatch can be spotted without revealing it.
@@ -93,28 +69,34 @@ export async function handleStatus(request: Request): Promise<Response> {
   })
 }
 
+/** Runs a handler with the shared store, turning a missing configuration or outage into a clear answer. */
+async function withStore(fn: (store: DataStore) => Promise<Response>, override?: Db | DataStore): Promise<Response> {
+  let store: DataStore | undefined
+  try {
+    store = override ? ('collection' in override ? mongoStore(override) : override) : await getStore()
+  } catch {
+    return json(503, { error: "Couldn't reach the database.", code: 'db_down' })
+  }
+  if (!store) return json(503, { error: 'The shared database isn’t set up.', code: 'no_db' })
+  try {
+    return await fn(store)
+  } catch (err) {
+    if (err instanceof StoreError) return json(err.status, { error: err.message })
+    throw err
+  }
+}
+
 /** /api/profiles — list (GET), create (POST), rename (PATCH), delete with all its data (DELETE). */
-export async function handleProfiles(request: Request, dbOverride?: Db): Promise<Response> {
+export async function handleProfiles(request: Request, override?: Db | DataStore): Promise<Response> {
   const denied = checkAccess(request)
   if (denied) return denied
-  return withDb(async (db) => {
-    const profiles = db.collection<ProfileDoc>('profiles')
-    const now = new Date().toISOString()
-
-    if (request.method === 'GET') {
-      const list = await profiles.find({}).sort({ createdAt: 1 }).limit(500).toArray()
-      return json(200, {
-        profiles: list.map((p) => ({ id: p._id, name: p.name, createdAt: p.createdAt, updatedAt: p.updatedAt })),
-      })
-    }
+  return withStore(async (store) => {
+    if (request.method === 'GET') return json(200, { profiles: await store.listProfiles() })
 
     if (request.method === 'DELETE') {
       const id = new URL(request.url).searchParams.get('id') ?? ''
       if (!PROFILE_ID.test(id)) return json(400, { error: 'Invalid profile id.' })
-      await Promise.all([
-        profiles.deleteOne({ _id: id }),
-        ...SYNCED_TABLES.map((t) => db.collection(t).deleteMany({ profileId: id })),
-      ])
+      await store.deleteProfile(id)
       return json(200, { deleted: id })
     }
 
@@ -127,49 +109,39 @@ export async function handleProfiles(request: Request, dbOverride?: Db): Promise
 
     if (request.method === 'POST') {
       // Creating an existing id just renames it, so retries are harmless.
-      const createdAt = typeof body.createdAt === 'string' ? body.createdAt.slice(0, 40) : now
-      await profiles.updateOne(
-        { _id: id },
-        { $set: { name, updatedAt: now }, $setOnInsert: { createdAt } },
-        { upsert: true },
-      )
+      const createdAt = typeof body.createdAt === 'string' ? body.createdAt.slice(0, 40) : new Date().toISOString()
+      await store.saveProfile(id, name, createdAt)
       return json(200, { id, name })
     }
-    if (request.method === 'PATCH') {
-      const res = await profiles.updateOne({ _id: id }, { $set: { name, updatedAt: now } })
-      return res.matchedCount ? json(200, { id, name }) : json(404, { error: 'No such profile.' })
-    }
+    if (request.method === 'PATCH')
+      return (await store.renameProfile(id, name)) ? json(200, { id, name }) : json(404, { error: 'No such profile.' })
     return json(405, { error: 'Method not allowed.' })
-  }, dbOverride)
+  }, override)
 }
 
 /**
  * /api/data
- *  GET  ?profileId=&table=&since=  → records changed after `since` (one page; `more` says if there's another)
+ *  GET  ?profileId=&table=&since=[&cont=1]  → records changed after `since` (one page; `more` says if there's another)
  *  POST { profileId, table, upserts: [{ id, data }], deletes: [id] } → saves them
+ * The first page re-reads a few seconds back (OVERLAP_MS); later pages (cont=1) start exactly at the
+ * cursor, so a big import saved within those seconds can't make the same page come back forever.
  */
-export async function handleData(request: Request, dbOverride?: Db): Promise<Response> {
+export async function handleData(request: Request, override?: Db | DataStore): Promise<Response> {
   const denied = checkAccess(request)
   if (denied) return denied
-  return withDb(async (db) => {
+  return withStore(async (store) => {
     if (request.method === 'GET') {
       const q = new URL(request.url).searchParams
       const profileId = q.get('profileId') ?? ''
       const table = q.get('table')
       const since = Number(q.get('since') ?? 0) || 0
       if (!PROFILE_ID.test(profileId) || !isTable(table)) return json(400, { error: 'Invalid profile or table.' })
-      const docs = await db
-        .collection<RecordDoc>(table)
-        .find({ profileId, srv: { $gt: Math.max(0, since - OVERLAP_MS) } })
-        .sort({ srv: 1 })
-        .limit(PAGE + 1)
-        .toArray()
-      const page = docs.slice(0, PAGE)
+      const after = q.get('cont') === '1' ? since : Math.max(0, since - OVERLAP_MS)
+      const { records, more } = await store.changes(profileId, table, after, PAGE)
       return json(200, {
-        records: page.map((d) => (d.deleted ? { id: d.id, deleted: true } : { id: d.id, data: d.data })),
-        // Next page starts after the last stamp returned (overlap is only applied to the first page's start).
-        cursor: page.length ? page[page.length - 1].srv : since,
-        more: docs.length > PAGE,
+        records: records.map((d) => (d.deleted ? { id: d.id, deleted: true } : { id: d.id, data: d.data })),
+        cursor: records.length ? records[records.length - 1].srv : since,
+        more,
       })
     }
 
@@ -184,7 +156,7 @@ export async function handleData(request: Request, dbOverride?: Db): Promise<Res
     if (upserts.length + deletes.length > MAX_RECORDS)
       return json(413, { error: `At most ${MAX_RECORDS} records per request.` })
 
-    const ops: AnyBulkWriteOperation<RecordDoc>[] = []
+    const writes: RecordWrite[] = []
     for (const u of upserts as Array<{ id?: unknown; data?: unknown }>) {
       if (
         typeof u?.id !== 'string' ||
@@ -196,27 +168,15 @@ export async function handleData(request: Request, dbOverride?: Db): Promise<Res
         return json(400, { error: 'Each record needs an id and data.' })
       const { _ts: _drop, ...data } = u.data as Record<string, unknown>
       void _drop
-      ops.push({
-        replaceOne: {
-          filter: { _id: `${profileId}:${u.id}` },
-          replacement: { profileId, id: u.id, data, srv: nextStamp() },
-          upsert: true,
-        },
-      })
+      writes.push({ id: u.id, data })
     }
     for (const id of deletes) {
       if (typeof id !== 'string' || id.length > 200) return json(400, { error: 'Invalid id to delete.' })
-      ops.push({
-        replaceOne: {
-          filter: { _id: `${profileId}:${id}` },
-          replacement: { profileId, id, deleted: true, srv: nextStamp() },
-          upsert: true,
-        },
-      })
+      writes.push({ id, deleted: true })
     }
-    if (ops.length) await db.collection<RecordDoc>(table).bulkWrite(ops, { ordered: false })
+    if (writes.length) await store.write(profileId, table, writes)
     return json(200, { saved: upserts.length, deleted: deletes.length })
-  }, dbOverride)
+  }, override)
 }
 
 /** One entry point for the dev server: picks the handler by path. */

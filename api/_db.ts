@@ -20,8 +20,6 @@ export const json = (status: number, body: unknown) =>
 let clientPromise: Promise<MongoClient> | undefined
 let indexesReady: Promise<void> | undefined
 
-export const databaseConfigured = () => !!process.env.MONGODB_URI
-
 /** The app's database, or undefined when MONGODB_URI isn't set (the app then works locally only). */
 export async function getDb(): Promise<Db | undefined> {
   const uri = process.env.MONGODB_URI
@@ -60,19 +58,4 @@ let lastStamp = 0
 export function nextStamp(): number {
   lastStamp = Math.max(Date.now(), lastStamp + 1)
   return lastStamp
-}
-
-/** Runs a handler with the database, turning a missing configuration or outage into a clear answer. */
-export async function withDb(fn: (db: Db) => Promise<Response>, dbOverride?: Db): Promise<Response> {
-  let db: Db | undefined
-  try {
-    db = dbOverride ?? (await getDb())
-  } catch {
-    return json(503, {
-      error: "Couldn't reach the database. Check MONGODB_URI and Atlas network access.",
-      code: 'db_down',
-    })
-  }
-  if (!db) return json(503, { error: 'The shared database isn’t set up (MONGODB_URI).', code: 'no_db' })
-  return fn(db)
 }

@@ -92,9 +92,10 @@ export interface PulledRecord {
   deleted?: boolean
 }
 
-export const pullRecords = (profileId: string, table: SyncedTable, since: number) =>
+/** `cont` marks a follow-on page: the server then starts exactly at `since` instead of re-reading a few seconds back. */
+export const pullRecords = (profileId: string, table: SyncedTable, since: number, cont = false) =>
   call<{ records: PulledRecord[]; cursor: number; more: boolean }>(
-    `/api/data?profileId=${encodeURIComponent(profileId)}&table=${table}&since=${since}`,
+    `/api/data?profileId=${encodeURIComponent(profileId)}&table=${table}&since=${since}${cont ? '&cont=1' : ''}`,
   )
 
 export const pushRecords = (
