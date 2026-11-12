@@ -85,8 +85,9 @@ export function PrivacyPage() {
                 <>
                   <B>Work information from Coresignal:</B> career history, degrees, certifications and skills for each
                   connection, matched by the LinkedIn profile link in your file, and company records, technologies and
-                  open job posts for their employers. Coresignal is a licensed data provider. The tool itself reads no
-                  websites and runs no web or LinkedIn searches.
+                  open job posts for their employers. A work email is kept only when Coresignal holds one for that
+                  person. Coresignal is a licensed data provider, and every fact shows Coresignal as its source. The
+                  tool itself reads no websites and runs no web or LinkedIn searches.
                 </>
               ) : (
                 <>
@@ -108,9 +109,10 @@ export function PrivacyPage() {
           </ul>
           <p style={{ margin: 0 }}>
             The tool does not collect home addresses, personal email or phone numbers, family details, health, religion,
-            political views or any other special category data. Public LinkedIn pages are used only when a web search
-            returns them (job posts, company pages, public profiles); the tool never logs in to LinkedIn or uses
-            anyone's account. Indeed and Glassdoor are never used.
+            political views or any other special category data.{' '}
+            {CORESIGNAL_ONLY
+              ? 'The tool never visits LinkedIn, never logs in to LinkedIn and never uses anyone\'s account. People without a LinkedIn profile link in your file are not looked up.'
+              : 'Public LinkedIn pages are used only when a web search returns them (job posts, company pages, public profiles). The tool never logs in to LinkedIn or uses anyone\'s account. Indeed and Glassdoor are never used.'}
           </p>
         </Section>
 
@@ -131,10 +133,17 @@ export function PrivacyPage() {
             <li>
               <B>Cloud sync, if turned on:</B> a copy is kept in 1BT's database so it can be shared with your team.
             </li>
+            {CORESIGNAL_ONLY && (
+              <li>
+                <B>Coresignal lookups:</B> to collect work data, the LinkedIn profile link of each connection and the
+                name or website of each company are sent to Coresignal through 1BT's server. Nothing else from your file
+                is sent.
+              </li>
+            )}
             <li>
-              <B>AI processing:</B> to collect web data and score searches, names, job titles and company names are sent
-              to the AI provider (OpenAI) through 1BT's server. The provider does not keep this data to train its
-              models.
+              <B>AI processing:</B> to score searches{CORESIGNAL_ONLY ? '' : ' and collect web data'}, names, job titles
+              and company names are sent to the AI provider (OpenAI) through 1BT's server. The provider does not keep
+              this data to train its models.
             </li>
           </ul>
         </Section>
@@ -153,6 +162,12 @@ export function PrivacyPage() {
             the request to {PRIVACY_CONTACT}. 1BT will reply within 21 working days. If you are not satisfied, you can
             complain to the Data Protection Authority of Sri Lanka.
           </p>
+          {CORESIGNAL_ONLY && (
+            <p style={{ margin: 0 }}>
+              Deleting data here removes it from this tool only. To have a profile removed from Coresignal itself, the
+              person can also contact Coresignal directly through its own privacy page.
+            </p>
+          )}
         </Section>
 
         <Section title="How it is protected">
