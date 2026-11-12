@@ -12,7 +12,7 @@ export function CapNotice() {
       // One notice per day's limit, however many requests were running.
       notification.error({
         key: 'ai-daily-cap',
-        message: 'Daily AI limit reached',
+        title: 'Daily AI limit reached',
         description: message,
         duration: 0,
         placement: 'topRight',

@@ -82,7 +82,7 @@ export function HqModal({ shown, selected, all, onClose }: Props) {
         </Flex>
       }
       width={580}
-      maskClosable={!running}
+      mask={{ closable: !running }}
       closable={!running}
       keyboard={!running}
       onCancel={onClose}

@@ -207,7 +207,6 @@ describe('location filters', () => {
     expect(run(cond('companyHq', 'is_not_empty'))).toEqual([hqBoston.id, hqElsewhere.id])
     expect(hqText(unknownHq.companyHq)).toBeUndefined()
   })
-
 })
 
 describe('HQ elsewhere in the app', () => {

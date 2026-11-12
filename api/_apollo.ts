@@ -1,3 +1,4 @@
+import { requireUser } from './_auth.js'
 /**
  * Forwards a few Apollo API calls for the browser. Apollo's API is meant to be called from a server,
  * so the app sends requests here with the user's own key in a header; this function adds nothing,
@@ -35,6 +36,8 @@ const json = (status: number, body: unknown) =>
 
 export async function handleApollo(request: Request, fetchImpl: typeof fetch = fetch): Promise<Response> {
   if (request.method !== 'POST') return json(405, { error: 'Use POST.' })
+  const denied = requireUser(request)
+  if (denied) return denied
   const key = request.headers.get('x-apollo-key')?.trim()
   if (!key || key.length < 10 || key.length > 200 || /\s/.test(key)) {
     return json(401, { error: 'Missing Apollo API key.' })

@@ -28,7 +28,7 @@ export function ViewTabs({ activeId, shown, total, dirty, canSave, onSaveNew, on
           role="tab"
           aria-selected={!activeId}
           className={`viewtab${!activeId ? ' active' : ''}`}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/table')}
         >
           <TableOutlined /> All people
         </button>
@@ -39,7 +39,7 @@ export function ViewTabs({ activeId, shown, total, dirty, canSave, onSaveNew, on
             role="tab"
             aria-selected={activeId === v.id}
             className={`viewtab${activeId === v.id ? ' active' : ''}`}
-            onClick={() => navigate(`/?view=${v.id}`)}
+            onClick={() => navigate(`/table?view=${v.id}`)}
           >
             <TableOutlined /> {v.name}
             {activeId === v.id && dirty && (

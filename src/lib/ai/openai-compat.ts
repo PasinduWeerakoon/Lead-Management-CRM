@@ -142,11 +142,17 @@ async function sendViaServer(path: string, init: RequestInit, modelLabel: string
     announceCap({ message, spentUsd: body.spentUsd, capUsd: body.capUsd })
     throw Object.assign(new AiError(message, 'limit'), { status: 429 })
   }
-  if (res.status === 401) throw new AiError('Enter the workspace access code (sidebar) to use the company AI key.', 'auth')
+  if (res.status === 401)
+    throw new AiError('Enter the workspace access code (sidebar) to use the company AI key.', 'auth')
   if (typeof body.error === 'string') throw Object.assign(new AiError(body.error, 'other'), { status: res.status })
   // OpenAI's own error, passed through by the server.
   throw Object.assign(
-    friendly('openai', res.status, { message: String(body.error?.message ?? ''), code: String(body.error?.code ?? '') }, modelLabel),
+    friendly(
+      'openai',
+      res.status,
+      { message: String(body.error?.message ?? ''), code: String(body.error?.code ?? '') },
+      modelLabel,
+    ),
     { status: res.status },
   )
 }

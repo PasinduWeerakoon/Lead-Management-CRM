@@ -68,10 +68,15 @@ export async function restoreBackup(backup: Backup): Promise<void> {
   })
 }
 
-/** Removes contacts and import history. Keyword packs and saved views are kept: they hold no personal data. */
+/**
+ * Deletes this profile's people, collected web data, imports, searches with every run, and saved prompts.
+ * Keyword packs, saved views and filter presets are kept: they hold no personal data.
+ */
 export async function deleteAllData(): Promise<void> {
-  await db.transaction('rw', db.contacts, db.imports, async () => {
+  await db.transaction('rw', [db.contacts, db.imports, db.scoreRuns, db.briefs], async () => {
     await db.contacts.toCollection().delete()
     await db.imports.toCollection().delete()
+    await db.scoreRuns.toCollection().delete()
+    await db.briefs.toCollection().delete()
   })
 }

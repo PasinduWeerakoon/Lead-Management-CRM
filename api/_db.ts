@@ -1,8 +1,9 @@
 import { MongoClient, type Db } from 'mongodb'
+import { requireUser } from './_auth.js'
 
 /**
  * Shared server helpers: the MongoDB connection (reused across requests, as serverless functions
- * keep warm instances), the workspace access code check, and JSON responses.
+ * keep warm instances), the Google sign-in check, and JSON responses.
  */
 
 export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets'] as const
@@ -49,13 +50,9 @@ export async function ensureIndexes(db: Db) {
 export const isHosted = () =>
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production'
 
-/**
- * The app has no login and no access code: every request is allowed. The company AI key is
- * protected by its daily spending limit. (APP_ACCESS_KEY is ignored if it's still set.)
- */
-export function checkAccess(_request: Request): Response | undefined {
-  void _request
-  return undefined
+/** Every data route calls this: a 401 unless someone is signed in with Google (see _auth.ts). */
+export function checkAccess(request: Request): Response | undefined {
+  return requireUser(request)
 }
 
 /** Strictly increasing write stamps, so "changes since" never misses two writes in the same millisecond. */

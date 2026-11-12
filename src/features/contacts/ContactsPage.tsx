@@ -346,7 +346,7 @@ export function ContactsPage() {
     const created = await createView(name, draft)
     setNaming(undefined)
     load(created.filter, created.id)
-    navigate(`/?view=${created.id}`)
+    navigate(`/table?view=${created.id}`)
     message.success(`Saved “${created.name}”.`)
   }
 
@@ -365,7 +365,7 @@ export function ContactsPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         await deleteView(activeView.id)
-        navigate('/')
+        navigate('/table')
       },
     })
   }
@@ -374,7 +374,7 @@ export function ContactsPage() {
     <div className="screen" style={{ position: 'relative' }}>
       <TopBar
         crumbs={[
-          { label: 'People', icon: <UserOutlined />, onClick: activeView ? () => navigate('/') : undefined },
+          { label: 'People', icon: <UserOutlined />, onClick: activeView ? () => navigate('/table') : undefined },
           activeView
             ? {
                 label: activeView.name,

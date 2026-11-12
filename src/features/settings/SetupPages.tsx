@@ -1,15 +1,15 @@
 import { BulbOutlined, TagsOutlined } from '../../components/icons'
 import { TopBar } from '../../components/TopBar'
-import { AiSection } from './AiSection'
+import { LimitsSection } from './LimitsSection'
 import { KeywordPacksSection } from './KeywordPacksSection'
 
 export function AiPage() {
   return (
     <div className="screen">
-      <TopBar crumbs={[{ label: 'Setup' }, { label: 'AI assistant', icon: <BulbOutlined /> }]} />
+      <TopBar crumbs={[{ label: 'Settings' }, { label: 'AI limit and Apollo', icon: <BulbOutlined /> }]} />
       <div className="screen-body">
         <div className="screen-narrow">
-          <AiSection />
+          <LimitsSection />
         </div>
       </div>
     </div>

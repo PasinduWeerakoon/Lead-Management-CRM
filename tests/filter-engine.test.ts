@@ -152,7 +152,6 @@ describe('presets', () => {
       expect(a.items[0].id).not.toBe(b.items[0].id)
     }
   })
-
 })
 
 describe('describe and highlight', () => {

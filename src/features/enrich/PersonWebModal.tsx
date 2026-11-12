@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Flex, Modal, Progress, Radio, Result, Select, Typography } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { SearchOutlined } from '../../components/icons'
@@ -16,10 +16,14 @@ interface Props {
   shown: Contact[]
   selected: Contact[]
   onClose: () => void
+  /** Start straight away (after an import), without waiting for a click. */
+  autoStart?: boolean
+  /** Close by itself when finished, so the next step can begin. */
+  autoClose?: boolean
 }
 
 /** "Search the web": find each person's public professional profile, then optionally score with a brief. */
-export function PersonWebModal({ shown, selected, onClose }: Props) {
+export function PersonWebModal({ shown, selected, onClose, autoStart, autoClose }: Props) {
   const { status, key, settings } = useAi()
   const briefs = useLiveQuery(() => db.briefs.orderBy('updatedAt').reverse().toArray(), [], [] as Brief[])
   const [scope, setScope] = useState<'shown' | 'selected'>(selected.length ? 'selected' : 'shown')
@@ -80,6 +84,17 @@ export function PersonWebModal({ shown, selected, onClose }: Props) {
   const running = phase === 'search' || phase === 'scoring'
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0
 
+  // After an import the run starts by itself, once the AI is ready.
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || phase !== 'setup' || status !== 'ready' || !key) return
+    autoStarted.current = true
+    void start()
+  })
+  useEffect(() => {
+    if (autoClose && phase === 'done' && progress) onClose()
+  }, [autoClose, phase, progress, onClose])
+
   return (
     <Modal
       open
@@ -89,7 +104,7 @@ export function PersonWebModal({ shown, selected, onClose }: Props) {
         </Flex>
       }
       width={600}
-      maskClosable={!running}
+      mask={{ closable: !running }}
       closable={!running}
       keyboard={!running}
       onCancel={onClose}
@@ -130,8 +145,9 @@ export function PersonWebModal({ shown, selected, onClose }: Props) {
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             Searches the public web for each person’s professional profile: company bios, talks, interviews, news and
             publications. It fills <b>Web research</b>, adds what they’re known for to <b>Keywords</b>, and fills{' '}
-            <b>Location</b> when it’s empty. Every fact links to the page it came from. LinkedIn is never used, and
-            personal details (contact details, family and so on) are never kept.
+            <b>Location</b> when it’s empty. Every fact links to the page it came from. Public LinkedIn pages are used
+            when the search finds them. Work email and phone are kept only when published; private details are never
+            kept.
           </Typography.Text>
 
           {status === 'none' && (
@@ -196,9 +212,9 @@ export function PersonWebModal({ shown, selected, onClose }: Props) {
               </span>
             </Flex>
             <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
-              Each person takes one or two web searches (about 1–2 cents each) and 5–15 seconds; four run at a time.
-              With the company key, searching stops when today’s limit is reached. Run it again tomorrow to continue:
-              people already searched are skipped.
+              Each person takes up to six web searches (about 1 cent each) and 5–15 seconds; four run at a time. With
+              the company key, searching stops when today’s limit is reached. Run it again tomorrow to continue: people
+              already searched are skipped.
             </Typography.Text>
           </div>
           {error && <Alert type="error" showIcon title={error} />}
@@ -231,7 +247,7 @@ export function PersonWebModal({ shown, selected, onClose }: Props) {
       {phase === 'done' && progress && (
         <Result
           status={progress.stopped && !progress.found ? 'warning' : 'success'}
-          title={`Found ${progress.found.toLocaleString()} of ${progress.total.toLocaleString()} people on the web`}
+          title={`Searched ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} people, found ${progress.found.toLocaleString()} on the web`}
           subTitle={
             <Flex vertical gap={4}>
               {progress.stopped && <span>{progress.stopped}</span>}

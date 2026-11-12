@@ -63,6 +63,27 @@ describe('backup', () => {
     expect(await db.imports.count()).toBe(1)
   })
 
+  it('delete all also removes searches, their runs and saved prompts, but keeps keyword packs', async () => {
+    await importText(CSV)
+    await db.briefs.put({ id: 'b1', name: 'Prompt', text: 'Worked at WSO2', createdAt: 'x', updatedAt: 'x' })
+    await db.scoreRuns.put({
+      id: 'r1',
+      briefId: 'b1',
+      briefName: 'Prompt',
+      briefText: 'Worked at WSO2',
+      model: 'm',
+      at: 'x',
+      total: 0,
+      people: [],
+    })
+    const packs = await db.keywordPacks.count()
+    await deleteAllData()
+    expect(await db.contacts.count()).toBe(0)
+    expect(await db.scoreRuns.count()).toBe(0)
+    expect(await db.briefs.count()).toBe(0)
+    expect(await db.keywordPacks.count()).toBe(packs)
+  })
+
   it('rejects files that are not backups', () => {
     expect(readBackup('not json').ok).toBe(false)
     expect(readBackup(JSON.stringify({ app: 'other' })).ok).toBe(false)

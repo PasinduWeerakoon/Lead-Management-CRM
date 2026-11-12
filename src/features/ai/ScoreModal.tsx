@@ -166,7 +166,7 @@ export function ScoreModal({ shown, selected, onClose, onShowHigh }: Props) {
         </Flex>
       }
       width={600}
-      maskClosable={!running}
+      mask={{ closable: !running }}
       closable={!running}
       keyboard={!running}
       onCancel={onClose}

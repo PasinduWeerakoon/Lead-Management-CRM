@@ -59,13 +59,11 @@ function keyState(settings: AiSettings, companyAi?: CompanyAi): Pick<AiState, 'k
   const p = settings.provider
   const key = readSessionKey(p)
   const devKey = p === 'groq' && !!DEV_GROQ && !DEV_GROQ.expired && key === DEV_GROQ.key
-  // Your own key wins; with none saved, OpenAI runs on the company key held by the server.
-  if (!key && p === 'openai' && companyAi && !settings.keys.openai?.encryptedKey)
-    return { key: COMPANY_KEY, devKey: false, company: true, status: 'ready' }
+  // AI is set up on the server: everyone uses the company key there. Personal keys are no longer offered,
+  // so an old one saved in this browser must not take over (it could be another provider).
+  if (companyAi && p === 'openai') return { key: COMPANY_KEY, devKey: false, company: true, status: 'ready' }
   return { key, devKey, company: false, status: key ? 'ready' : settings.keys[p]?.encryptedKey ? 'locked' : 'none' }
 }
-
-const ownKey = (settings: AiSettings, p: Provider) => !!readSessionKey(p) || !!settings.keys[p]?.encryptedKey
 
 export const useAi = create<AiState>((set, get) => ({
   settings: DEFAULT_AI_SETTINGS,
@@ -104,13 +102,8 @@ export const useAi = create<AiState>((set, get) => ({
       companyAi = undefined
     }
     let settings = get().settings
-    // No key of your own for the current provider: switch to the company's GPT.
-    if (
-      (companyAi || companyNeedsCode) &&
-      !ownKey(settings, settings.provider) &&
-      settings.provider !== 'openai' &&
-      !get().devKey
-    )
+    // The company's GPT on the server is the only AI now: switch old settings over to it.
+    if ((companyAi || companyNeedsCode) && settings.provider !== 'openai')
       settings = await saveAiSettings({ provider: 'openai', model: DEFAULT_MODEL_BY_PROVIDER.openai })
     set({ companyAi, companyNeedsCode, settings, ...keyState(settings, companyAi) })
   },

@@ -15,8 +15,28 @@ const UA = 'LeadsResearchBot/1.0 (+company research for a private lead list; res
 const PAGE_TIMEOUT_MS = 8000
 const MAX_BYTES = 1_500_000
 const MAX_TEXT = 8000
-const SUBPAGES = ['/about', '/about-us', '/company', '/contact', '/contact-us', '/careers', '/jobs', '/news']
-const MAX_SUBPAGES = 4
+const SUBPAGES = [
+  '/about',
+  '/about-us',
+  '/company',
+  '/services',
+  '/solutions',
+  '/products',
+  '/clients',
+  '/customers',
+  '/case-studies',
+  '/partners',
+  '/team',
+  '/leadership',
+  '/management',
+  '/careers',
+  '/jobs',
+  '/news',
+  '/contact',
+  '/contact-us',
+]
+/** Enough pages to fill the Company tab: about, services, clients, partners, team, careers, news. */
+const MAX_SUBPAGES = 10
 /** Whole-site budget, so one request always answers within the host's limit (CloudFront waits 60s). */
 const SITE_BUDGET_MS = 40_000
 
@@ -355,10 +375,14 @@ export async function readSite(domain: string, fetchImpl: typeof fetch = fetch):
     })
     .filter(
       (u): u is URL =>
-        !!u && u.hostname === base.hostname && /about|company|contact|career|jobs|news|who-we-are/i.test(u.pathname),
+        !!u &&
+        u.hostname === base.hostname &&
+        /about|company|contact|career|jobs|vacanc|news|press|who-we-are|what-we-do|service|solution|product|client|customer|case-stud|success-stor|portfolio|partner|team|leader|management|board|people|location|office|certif|award/i.test(
+          u.pathname,
+        ),
     )
     .map((u) => u.pathname.replace(/\/+$/, '') || '/')
-  const paths = [...new Set([...linked, ...SUBPAGES])].filter((p) => p !== '/').slice(0, 12)
+  const paths = [...new Set([...linked, ...SUBPAGES])].filter((p) => p !== '/').slice(0, 30)
 
   let read = 0
   for (const path of paths) {

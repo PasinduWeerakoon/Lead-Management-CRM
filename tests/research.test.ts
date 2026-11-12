@@ -12,7 +12,7 @@ import {
 } from '../api/_research'
 import { classifyTitle } from '../src/lib/classify-title'
 import { db } from '../src/lib/db'
-import { cleanDomain, validateExtract } from '../src/lib/research/extract'
+import { cleanDomain, validateExtract, ExtractOutput } from '../src/lib/research/extract'
 import { applyResearch, planResearch, runResearch } from '../src/lib/research/run'
 import { toScoringRow } from '../src/lib/ai/scoring'
 import type { Contact } from '../src/lib/schemas'
@@ -130,7 +130,7 @@ describe('keeping only facts the pages back up', () => {
 
   it('drops facts whose quote isn’t on the cited page, and roles that weren’t listed', () => {
     const { facts, dropped } = validateExtract(
-      {
+      ExtractOutput.parse({
         hq: { value: 'Colombo, Sri Lanka', url: 'https://contoso.lk/contact', quote: '12 Galle Road, Colombo 03' },
         industry: { value: 'Banking', url: 'https://contoso.lk/', quote: 'leading bank in Asia' },
         size: null,
@@ -140,8 +140,12 @@ describe('keeping only facts the pages back up', () => {
           { name: 'Power BI', url: 'https://other.com/', quote: 'Power BI' },
         ],
         hiring: ['Dynamics 365 Functional Consultant', 'Chief Wizard'],
+        clients: [
+          { name: 'Head office', url: 'https://contoso.lk/contact', quote: 'Head office' },
+          { name: 'Made Up Bank', url: 'https://contoso.lk/', quote: 'Made Up Bank' },
+        ],
         summary: 'A company on Dynamics 365.',
-      },
+      }),
       pages,
       jobs,
     )
@@ -151,7 +155,8 @@ describe('keeping only facts the pages back up', () => {
     expect(facts.hiring).toEqual([
       { title: 'Dynamics 365 Functional Consultant', url: 'https://jobs/1', source: 'Lever' },
     ])
-    expect(dropped).toBe(4)
+    expect(facts.clients?.map((x) => x.name)).toEqual(['Head office'])
+    expect(dropped).toBe(5)
   })
 
   it('cleans suggested domains', () => {
@@ -317,6 +322,7 @@ describe('research retries', () => {
     await db.contacts.put(a)
     let aiCalls = 0
     globalThis.fetch = (async (url: string) => {
+      if (url.startsWith('/api/sources')) return new Response(JSON.stringify({ edgar: null, wikidata: null, jobs: [] }))
       if (url === '/api/research')
         return new Response(
           JSON.stringify({

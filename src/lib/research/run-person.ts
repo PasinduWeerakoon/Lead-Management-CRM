@@ -2,7 +2,8 @@ import { db } from '../db'
 import type { Contact } from '../schemas'
 import { AiError } from '../ai/provider'
 import { recordUsage } from '../ai/settings'
-import { searchPerson, WEB_MODEL, WEB_SEARCH_USD, type PersonWeb } from './person'
+import { mergeWeb, searchPerson, WEB_MODEL, WEB_SEARCH_USD, type PersonWeb } from './person'
+import { fetchWorkEmail } from './sources'
 
 const PARALLEL = 4
 const STOP_KINDS = new Set(['cancelled', 'auth', 'permission', 'model', 'limit', 'network'])
@@ -14,6 +15,8 @@ export interface WebProgress {
   costUsd: number
   stopped?: string
   warnings: string[]
+  /** What just happened, e.g. "Ana Example: found, 4 employers, 2 degrees". */
+  step?: string
 }
 
 /** People to search: everyone without a finished search (failed ones are always tried again). */
@@ -27,7 +30,10 @@ export async function saveWeb(id: string, web: PersonWeb) {
     .where('id')
     .equals(id)
     .modify((c) => {
-      c.web = web
+      // A new search that finds nothing never replaces a profile found before.
+      if (web.status !== 'found' && c.web?.status === 'found') return
+      // Add to what was found before instead of replacing it (newer values win, lists are joined).
+      c.web = c.web?.status === 'found' && web.status === 'found' ? { ...mergeWeb(web, c.web), at: web.at } : web
       if (web.location && c.location?.origin !== 'manual') c.location = { value: web.location, origin: 'enriched' }
     })
 }
@@ -58,8 +64,34 @@ export async function runWeb(opts: {
         const res = await searchPerson({ apiKey: opts.apiKey, provider: opts.provider, contact, signal: opts.signal })
         const usage = await recordUsage(WEB_MODEL, 'web', res.usage, res.searches * WEB_SEARCH_USD)
         p.costUsd += usage.costUsd
+        // Hunter: a published or verified work email, when the web search didn't find one.
+        const domain = contact.research?.domain
+        if (res.web.status !== 'error' && !res.web.email && domain && contact.firstName && contact.lastName) {
+          const found = await fetchWorkEmail(contact.firstName, contact.lastName, domain, opts.signal)
+          if (found)
+            res.web = {
+              ...res.web,
+              ...(res.web.status === 'not_found' ? { status: 'found' as const, facts: [] } : {}),
+              email: { value: found.email, url: found.url, basis: found.basis },
+            }
+        }
         await saveWeb(contact.id, res.web)
         if (res.web.status === 'found') p.found++
+        const w = res.web
+        p.step =
+          w.status === 'found'
+            ? `${contact.fullName}: ${
+                [
+                  w.career?.length && `${w.career.length} employers`,
+                  w.education?.length && `${w.education.length} degrees`,
+                  w.projects?.length && `${w.projects.length} projects`,
+                  w.email && 'work email',
+                  w.github && 'GitHub',
+                ]
+                  .filter(Boolean)
+                  .join(', ') || 'profile found'
+              }`
+            : `${contact.fullName}: nothing public found on the web or LinkedIn`
       } catch (err) {
         const e = err instanceof AiError ? err : new AiError('Unexpected error while searching.', 'other')
         if (STOP_KINDS.has(e.kind)) {

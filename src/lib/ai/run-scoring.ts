@@ -28,6 +28,12 @@ interface RunOptions {
   model: string
   effort: Effort
   brief: Brief
+  /** The conditions the prompt was split into, checked one by one for every person. */
+  criteria?: string[]
+  promptIssues?: ScoreRun['promptIssues']
+  refreshed?: ScoreRun['refreshed']
+  /** Steps so far (shared with the caller, which keeps adding to it); saved with the run. */
+  log?: ScoreRun['log']
   people: Contact[]
   signal: AbortSignal
   onProgress: (p: ScoringProgress) => void
@@ -40,7 +46,7 @@ const STOP_KINDS = new Set(['cancelled', 'auth', 'permission', 'model', 'limit',
 /** Scores people batch by batch. Results are saved as each batch finishes, so stopping keeps what's done. */
 export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
   const people = opts.people
-  const system = buildScoringSystemPrompt(opts.brief)
+  const system = buildScoringSystemPrompt(opts.brief, opts.criteria)
   const groups = batches(people)
   const summary: ScoringSummary = {
     scored: 0,
@@ -62,6 +68,9 @@ export async function runScoring(opts: RunOptions): Promise<ScoringSummary> {
     at: new Date().toISOString(),
     total: people.length,
     people: [],
+    ...(opts.criteria?.length ? { criteria: opts.criteria } : {}),
+    ...(opts.promptIssues?.length ? { promptIssues: opts.promptIssues } : {}),
+    ...(opts.refreshed ? { refreshed: opts.refreshed } : {}),
   }
 
   const scoreGroup = async (group: Contact[]): Promise<Contact[]> => {
@@ -124,6 +133,8 @@ async function saveRun(run: ScoreRun, group: Contact[], results: Map<string, AiA
       score: a.score,
       priority: a.priority,
       reason: a.reason,
+      ...(a.checks ? { checks: a.checks } : {}),
+      ...(a.missing ? { missing: a.missing } : {}),
     })
   }
   if (run.people.length) await db.scoreRuns.put(run)

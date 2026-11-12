@@ -19,12 +19,12 @@ const OPENAI = 'https://api.openai.com/v1'
 const MAX_BODY = 1_500_000
 const MAX_OUTPUT = 16_000
 /** Web search: at most this many searches per request, each billed as a tool call. */
-export const MAX_SEARCHES = 2
+export const MAX_SEARCHES = 6
 /** OpenAI's web search tool fee per call (list price, Oct 2026); search results are billed as input tokens on top. */
 export const WEB_SEARCH_USD = 0.01
 /** Search results added to the prompt, per search (worst case, for the up-front limit check). */
 const SEARCH_TOKENS = 15_000
-const MAX_SEARCH_OUTPUT = 4_000
+const MAX_SEARCH_OUTPUT = 8_000
 
 export const companyAiConfigured = () => !!process.env.OPENAI_API_KEY?.trim()
 
@@ -34,7 +34,7 @@ export const usd = (n: number) => `$${n.toFixed(2)}`
 
 export function capReached(spent: number, cap: number) {
   return json(429, {
-    error: `Today's company AI limit is used up (${usd(spent)} of ${usd(cap)}). It resets at midnight Sri Lanka time, or add your own key under AI assistant to keep going.`,
+    error: `Today's AI limit of ${usd(cap)} has been reached, so work has paused. Everything found so far is saved, and you can carry on tomorrow. To raise the limit, ask your administrator.`,
     code: 'daily_cap',
     spentUsd: spent,
     capUsd: cap,

@@ -15,10 +15,12 @@ export function DoneStep({ record, onAnother }: { record: ImportRecord; onAnothe
     <Result
       status="success"
       title="Your connections are in"
-      subTitle={`${parts.join(' · ')}. Saved to this profile. Without a shared database connected, it lives only in this browser — make a backup from Settings now and then.`}
+      subTitle={`${parts.join(' · ')}. Next, collect web data so searches have something to work with.`}
       extra={[
+        <Button type="primary" key="collect" onClick={() => navigate('/enrich?start=1')}>
+          Next: collect web data
+        </Button>,
         <Button
-          type="primary"
           key="view"
           onClick={() => {
             // Show the whole list after an import, not whatever filter was active before it.
@@ -26,10 +28,7 @@ export function DoneStep({ record, onAnother }: { record: ImportRecord; onAnothe
             navigate('/')
           }}
         >
-          See your contacts
-        </Button>,
-        <Button key="enrich" onClick={() => navigate('/enrich')}>
-          Add company data
+          See connections
         </Button>,
         <Button key="another" onClick={onAnother}>
           Import another file

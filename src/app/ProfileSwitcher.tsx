@@ -88,11 +88,39 @@ export function ProfileSwitcher({ collapsed }: { collapsed: boolean }) {
             <Button type="text" icon={<UsersGroupOutlined />} aria-label="Switch profile" />
           </Tooltip>
         ) : (
-          <button type="button" className="profile-switch" aria-label="Switch profile">
-            <span className="profile-avatar" aria-hidden>
-              {(current?.name ?? '?').slice(0, 1).toUpperCase()}
+          <button
+            type="button"
+            aria-label="Switch profile"
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              padding: '8px 10px',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              background: 'var(--bg-header)',
+              cursor: 'pointer',
+              font: 'inherit',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <b
+                style={{
+                  color: 'var(--ink)',
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {current?.name ?? 'Profile'}
+              </b>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Profile</span>
             </span>
-            <span className="profile-name">{current?.name ?? 'Profile'}</span>
             <DownOutlined style={{ color: 'var(--text-3)' }} />
           </button>
         )}

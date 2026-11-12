@@ -270,7 +270,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
     key: 'research',
     title: 'Company research',
     run: 'research',
-    info: 'From the company’s own website: what it does, HQ, industry and technologies — each fact quoted from a page that was read. LinkedIn is never read. Open a person to see the sources.',
+    info: 'From the company’s own website: what it does, HQ, industry and technologies — each fact quoted from a page that was read. Public LinkedIn pages are used when a web search finds them. Open a person to see the sources.',
     icon: <WorldOutlined />,
     width: 300,
     meta: (rows) => fill(rows, (c) => c.research?.status === 'found'),
@@ -286,7 +286,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
     key: 'web',
     title: 'Web research',
     run: 'web',
-    info: 'What a web search found about the person: company bios, talks, interviews and news. Also adds keywords and fills Location when empty. Every fact links to its page; LinkedIn is never used. Open a person to see the sources.',
+    info: 'What a web search found about the person: company bios, talks, interviews and news. Also adds keywords and fills Location when empty. Every fact links to its page, including public LinkedIn pages a search returns. Open a person to see the sources.',
     icon: <SearchOutlined />,
     width: 300,
     meta: (rows) => fill(rows, (c) => c.web?.status === 'found'),
@@ -706,7 +706,9 @@ export function buildColumns(visible: ColumnKey[], rows: Contact[], ctx: CellCon
     title: <ColumnHead def={def} rows={rows} ctx={ctx} />,
     width: def.width,
     fixed: i === 0 ? ('left' as const) : undefined,
-    ellipsis: ['title', 'company', 'tags', 'aiReason', 'email', 'industry', 'companySize', 'research', 'web'].includes(def.key)
+    ellipsis: ['title', 'company', 'tags', 'aiReason', 'email', 'industry', 'companySize', 'research', 'web'].includes(
+      def.key,
+    )
       ? { showTitle: true }
       : undefined,
     render: (_: unknown, c: Contact) => def.render(c, ctx),

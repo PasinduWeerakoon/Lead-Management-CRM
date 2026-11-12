@@ -61,7 +61,7 @@ export function BriefsPage() {
     } catch {
       // non-critical: the brief can still be picked in the dialog
     }
-    navigate('/?score=1')
+    navigate(`/results/new?search=${b.id}`)
   }
 
   return (

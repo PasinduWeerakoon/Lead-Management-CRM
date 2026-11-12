@@ -113,13 +113,11 @@ describe('/api/profiles and /api/data on MongoDB', () => {
     expect((await handleData(req('GET', '/api/data?profileId=a&table=settings&since=0'), mdb)).status).toBe(400)
   })
 
-  it('needs no access code, even with APP_ACCESS_KEY still set', async () => {
-    process.env.APP_ACCESS_KEY = 'open-sesame-123'
+  it('refuses data when hosted without Google sign-in set up', async () => {
     process.env.VERCEL = '1'
     try {
-      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(200)
+      expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(503)
     } finally {
-      delete process.env.APP_ACCESS_KEY
       delete process.env.VERCEL
     }
   })
@@ -268,4 +266,3 @@ describe('syncing a profile between this browser and MongoDB', () => {
     expect(server.profiles.map((p: { id: string }) => p.id).sort()).toEqual(['default', 'team'])
   })
 })
-

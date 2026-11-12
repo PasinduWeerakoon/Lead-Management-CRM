@@ -103,7 +103,7 @@ export function EnrichRunModal({ kind, shown, selected, onClose }: Props) {
         </Flex>
       }
       width={560}
-      maskClosable={!running}
+      mask={{ closable: !running }}
       closable={!running}
       keyboard={!running}
       onCancel={onClose}

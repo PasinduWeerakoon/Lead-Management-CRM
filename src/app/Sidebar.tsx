@@ -1,224 +1,217 @@
-import { useState } from 'react'
-import { Button, Layout, Menu, Tooltip } from 'antd'
-import {
-  BankOutlined,
-  CheckCircleOutlined,
-  BulbOutlined,
-  CloudUploadOutlined,
-  DesktopOutlined,
-  FileTextOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  MoonOutlined,
-  SettingOutlined,
-  SunOutlined,
-  TagsOutlined,
-  ThunderboltOutlined,
-  UserOutlined,
-} from '../components/icons'
+import { useMemo, useState } from 'react'
+import { Layout } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { db } from '../lib/db'
-import { useUi, type ThemeMode } from './store'
+import type { Contact, ScoreRun } from '../lib/schemas'
 import { ProfileSwitcher, SyncStatus } from './ProfileSwitcher'
+import { useAuth } from '../features/auth/store'
+import { coverage } from '../features/home/HomePage'
+import { groupSearches } from '../features/ai/ResultsPage'
 
-const THEME_NEXT: Record<ThemeMode, ThemeMode> = { light: 'dark', dark: 'system', system: 'light' }
-const THEME_ICON: Record<ThemeMode, React.ReactNode> = {
-  light: <SunOutlined />,
-  dark: <MoonOutlined />,
-  system: <DesktopOutlined />,
-}
-const THEME_LABEL: Record<ThemeMode, string> = { light: 'Light', dark: 'Dark', system: 'Match system' }
-
-/** Monogram mark: a blue tile with a white "L". */
-function Mark({ size = 26 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden style={{ flex: 'none' }}>
-      <rect width="28" height="28" rx="7" fill="var(--primary)" />
-      <path
-        d="M10 7.5v13h8.5"
-        stroke="var(--on-ink)"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <circle cx="18.5" cy="9.5" r="2" fill="#fff" opacity=".6" />
-    </svg>
-  )
+interface Item {
+  to: string
+  label: string
+  /** Paths that also count as this item, e.g. /results/new under Searches. */
+  also?: string[]
+  count?: string
+  countTone?: 'accent' | 'muted'
 }
 
-export function Sidebar() {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const [collapsed, setCollapsed] = useState(false)
-  const { themeMode, setThemeMode } = useUi()
-  const count = useLiveQuery(() => db.contacts.count(), [], 0)
-
-  const nav = (items: Array<{ key: string; icon: React.ReactNode; label: React.ReactNode }>) => (
-    <Menu
-      mode="inline"
-      inlineCollapsed={collapsed}
-      selectedKeys={[pathname]}
-      items={items}
-      onClick={(e) => navigate(e.key)}
-      style={{ border: 'none', background: 'transparent' }}
-    />
-  )
-
+function NavLink({ item, active, onGo }: { item: Item; active: boolean; onGo: (to: string) => void }) {
   return (
-    <Layout.Sider
-      width={236}
-      collapsedWidth={60}
-      collapsed={collapsed}
-      breakpoint="lg"
-      onBreakpoint={setCollapsed}
-      trigger={null}
-      style={{ borderRight: '1px solid var(--border-subtle)' }}
+    <a
+      href={item.to}
+      aria-current={active ? 'page' : undefined}
+      onClick={(e) => {
+        e.preventDefault()
+        onGo(item.to)
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 8,
+        padding: '9px 10px',
+        borderRadius: 7,
+        textDecoration: 'none',
+        fontSize: 14,
+        background: active ? 'var(--bg-hover)' : 'transparent',
+        color: active ? 'var(--ink)' : 'var(--text-2)',
+        fontWeight: active ? 500 : 400,
+      }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div
+      <span>{item.label}</span>
+      {item.count && (
+        <span
+          className="num"
           style={{
-            height: 52,
-            flex: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'space-between',
-            padding: collapsed ? 0 : '0 8px 0 14px',
+            fontSize: 13,
+            color: item.countTone === 'accent' ? 'var(--primary)' : 'var(--text-3)',
+            fontWeight: 400,
           }}
         >
-          {collapsed ? (
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              aria-label="Expand sidebar"
-              style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer' }}
-            >
-              <Mark />
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  border: 0,
-                  background: 'none',
-                  padding: 0,
-                  cursor: 'pointer',
-                  minWidth: 0,
-                  textAlign: 'left',
-                  font: 'inherit',
-                }}
-              >
-                <Mark />
-                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, minWidth: 0 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>
-                    Leads
-                  </span>
-                  <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Prospecting workspace</span>
-                </span>
-              </button>
-              <Tooltip title="Collapse sidebar" placement="right">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<MenuFoldOutlined />}
-                  onClick={() => setCollapsed(true)}
-                  aria-label="Collapse sidebar"
-                  style={{ color: 'var(--text-3)' }}
-                />
-              </Tooltip>
-            </>
-          )}
-        </div>
+          {item.count}
+        </span>
+      )}
+    </a>
+  )
+}
 
-        <div style={{ padding: collapsed ? '0 0 4px' : '0 8px 4px', display: 'flex', justifyContent: 'center' }}>
-          <ProfileSwitcher collapsed={collapsed} />
-        </div>
+/** Who is signed in, with a sign-out link. */
+function SignedInAs() {
+  const { user, signOut } = useAuth()
+  if (!user) return null
+  return (
+    <div
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 10px' }}
+    >
+      <span
+        title={user.email}
+        style={{
+          fontSize: 12.5,
+          color: 'var(--text-3)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {user.email}
+      </span>
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        style={{
+          border: 0,
+          background: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          font: 'inherit',
+          fontSize: 12.5,
+          color: 'var(--primary)',
+        }}
+      >
+        Sign out
+      </button>
+    </div>
+  )
+}
 
-        <div style={{ padding: '4px 8px', flex: 1, overflowY: 'auto' }}>
-          {!collapsed && (
-            <div className="sidebar-section" style={{ paddingTop: 8 }}>
-              Workspace
-            </div>
-          )}
-          {nav([
-            {
-              key: '/',
-              icon: <UserOutlined />,
-              label: (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    width: '100%',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  People
-                  {count > 0 && (
-                    <span className="num" style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 400 }}>
-                      {count.toLocaleString()}
-                    </span>
-                  )}
-                </span>
-              ),
-            },
-            { key: '/results', icon: <BulbOutlined />, label: 'AI results' },
-            { key: '/import', icon: <CloudUploadOutlined />, label: 'Import' },
-            { key: '/enrich', icon: <BankOutlined />, label: 'Company data' },
-          ])}
+/** Profile, Home, the four steps in order, then Settings. */
+export function Sidebar() {
+  const go = useNavigate()
+  const { pathname } = useLocation()
+  // On a phone the menu is hidden behind a Menu button and closes after picking a page.
+  const [small, setSmall] = useState(false)
+  const [open, setOpen] = useState(false)
+  const navigate = (to: string) => {
+    go(to)
+    if (small) setOpen(false)
+  }
+  const contacts = useLiveQuery(() => db.contacts.toArray(), [], [] as Contact[])
+  const runs = useLiveQuery(() => db.scoreRuns.toArray(), [], [] as ScoreRun[])
+  const pct = useMemo(() => coverage(contacts).percent, [contacts])
+  const searches = useMemo(() => groupSearches(runs).length, [runs])
 
-          {!collapsed && <div className="sidebar-section">Setup</div>}
-          {nav([
-            { key: '/presets', icon: <ThunderboltOutlined />, label: 'Presets' },
-            { key: '/briefs', icon: <FileTextOutlined />, label: 'Briefs' },
-            { key: '/keyword-packs', icon: <TagsOutlined />, label: 'Keyword packs' },
-            { key: '/ai', icon: <BulbOutlined />, label: 'AI assistant' },
-            { key: '/accuracy', icon: <CheckCircleOutlined />, label: 'Accuracy' },
-          ])}
-        </div>
+  const steps: Item[] = [
+    { to: '/import', label: '1 Import' },
+    {
+      to: '/enrich',
+      label: '2 Collect web data',
+      also: ['/enrich/csv'],
+      count: contacts.length ? `${pct}%` : undefined,
+      countTone: 'accent',
+    },
+    { to: '/', label: '3 Connections', also: ['/table'], count: contacts.length.toLocaleString() },
+    { to: '/results', label: '4 Searches', also: ['/results/new'], count: searches.toLocaleString() },
+  ]
+  const isActive = (i: Item) => pathname === i.to || !!i.also?.includes(pathname)
 
-        <div style={{ padding: '8px 8px 12px', borderTop: '1px solid var(--border-subtle)' }}>
-          {nav([{ key: '/settings', icon: <SettingOutlined />, label: 'Settings' }])}
-          {collapsed ? (
-            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
-              <Button
-                type="text"
-                size="small"
-                icon={<MenuUnfoldOutlined />}
-                onClick={() => setCollapsed(false)}
-                aria-label="Expand sidebar"
-              />
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 4px 0 10px',
-              }}
-            >
-              <SyncStatus />
-              <Tooltip title={`Theme: ${THEME_LABEL[themeMode]}`} placement="top">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={THEME_ICON[themeMode]}
-                  onClick={() => setThemeMode(THEME_NEXT[themeMode])}
-                  aria-label={`Theme: ${THEME_LABEL[themeMode]}. Click to change.`}
-                  style={{ color: 'var(--text-2)' }}
-                />
-              </Tooltip>
-            </div>
-          )}
-        </div>
-      </div>
-    </Layout.Sider>
+  return (
+    <>
+      {small && (
+        <button
+          type="button"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          style={{
+            position: 'fixed',
+            top: 'calc(10px + env(safe-area-inset-top, 0px))',
+            right: 12,
+            zIndex: 1001,
+            height: 38,
+            padding: '0 14px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--bg-header)',
+            color: 'var(--ink)',
+            font: 'inherit',
+            fontWeight: 500,
+            boxShadow: 'var(--shadow-sm)',
+            cursor: 'pointer',
+          }}
+        >
+          {open ? 'Close' : 'Menu'}
+        </button>
+      )}
+      <Layout.Sider
+        width={240}
+        breakpoint="md"
+        collapsedWidth={0}
+        collapsed={small && !open}
+        onBreakpoint={(b) => {
+          setSmall(b)
+          setOpen(false)
+        }}
+        trigger={null}
+        style={{
+          background: 'var(--bg-header)',
+          borderRight: '1px solid var(--border)',
+          ...(small
+            ? {
+                position: 'fixed',
+                zIndex: 1000,
+                height: '100%',
+                left: 0,
+                top: 0,
+                width: 260,
+                minWidth: 260,
+                maxWidth: '85vw',
+                boxShadow: 'var(--shadow-pop)',
+              }
+            : {}),
+        }}
+      >
+        <nav
+          aria-label="Main"
+          style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 2, padding: '18px 12px' }}
+        >
+          <div style={{ marginBottom: 14 }}>
+            <ProfileSwitcher collapsed={false} />
+          </div>
+          <NavLink item={{ to: '/home', label: 'Home' }} active={pathname === '/home'} onGo={navigate} />
+          <span style={{ fontSize: 12, color: 'var(--text-3)', padding: '14px 10px 4px' }}>Steps</span>
+          {steps.map((s) => (
+            <NavLink key={s.to} item={s} active={isActive(s)} onGo={navigate} />
+          ))}
+          <span style={{ flex: 1 }} />
+          <NavLink
+            item={{ to: '/settings', label: 'Settings' }}
+            active={['/settings', '/ai', '/briefs', '/keyword-packs', '/presets', '/accuracy'].includes(pathname)}
+            onGo={navigate}
+          />
+          <NavLink
+            item={{ to: '/privacy', label: 'Privacy and PDPA' }}
+            active={pathname === '/privacy'}
+            onGo={navigate}
+          />
+          <SignedInAs />
+          <div style={{ padding: '4px 10px 0' }}>
+            <SyncStatus />
+          </div>
+        </nav>
+      </Layout.Sider>
+    </>
   )
 }

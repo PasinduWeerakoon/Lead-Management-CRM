@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Flex, Modal, Progress, Radio, Result, Select, Typography } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { WorldOutlined } from '../../components/icons'
@@ -9,7 +9,6 @@ import { estimateWebCost } from '../../lib/research/person'
 import { planResearch, runResearch, type ResearchProgress, type ResearchSummary } from '../../lib/research/run'
 import { runScoring, type ScoringSummary } from '../../lib/ai/run-scoring'
 import { checkBudget, useAi } from '../ai/store'
-import { ModelPicker } from '../ai/ModelPicker'
 import { UnlockForm } from '../ai/UnlockForm'
 import { KeyForm } from '../settings/AiSection'
 
@@ -17,6 +16,10 @@ interface Props {
   shown: Contact[]
   selected: Contact[]
   onClose: () => void
+  /** Start straight away (after an import), without waiting for a click. */
+  autoStart?: boolean
+  /** Close by itself when finished, so the next step can begin. */
+  autoClose?: boolean
 }
 
 /** Rough tokens per company: one site read (~4k in, ~0.8k out) plus a share of the website-finding step. */
@@ -24,7 +27,7 @@ const IN_PER_COMPANY = 4500
 const OUT_PER_COMPANY = 1200
 
 /** "Company research": read each company's own website and job board, then optionally score with a brief. */
-export function ResearchModal({ shown, selected, onClose }: Props) {
+export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }: Props) {
   const { status, key, settings } = useAi()
   const briefs = useLiveQuery(() => db.briefs.orderBy('updatedAt').reverse().toArray(), [], [] as Brief[])
   const [scope, setScope] = useState<'shown' | 'selected'>(selected.length ? 'selected' : 'shown')
@@ -64,6 +67,7 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
       signal: abort.current.signal,
       onProgress: setProgress,
       beforeCall: checkBudget,
+      reuse: !redo,
       ...(web ? { web: { provider: settings.provider } } : {}),
     })
     setSummary(result)
@@ -97,6 +101,18 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
   const running = phase === 'research' || phase === 'scoring'
   const pct = progress?.total ? Math.round((progress.done / progress.total) * 100) : 0
 
+  const peopleCount = companies.reduce((n, c) => n + c.people.length, 0)
+  // After an import the run starts by itself, once the AI is ready.
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || phase !== 'setup' || status !== 'ready' || !key) return
+    autoStarted.current = true
+    void start()
+  })
+  useEffect(() => {
+    if (autoClose && phase === 'done' && summary) onClose()
+  }, [autoClose, phase, summary, onClose])
+
   return (
     <Modal
       open
@@ -106,7 +122,7 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
         </Flex>
       }
       width={600}
-      maskClosable={!running}
+      mask={{ closable: !running }}
       closable={!running}
       keyboard={!running}
       onCancel={onClose}
@@ -149,13 +165,10 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
             pages and its job board, and keep only facts quoted from those pages: HQ, industry, technologies, relevant
             open roles and a short summary. With web search on, it also searches the web for companies whose site can’t
             be read and for open roles on job sites, each linked to its page. Empty fields in the table are filled;
-            nothing you entered is replaced. LinkedIn, Indeed and Glassdoor are never used.
+            nothing you entered is replaced. Public LinkedIn job posts and company pages are used when the search finds
+            them; Indeed and Glassdoor never are.
           </Typography.Text>
 
-          <Flex vertical gap={6}>
-            <Typography.Text strong>AI model</Typography.Text>
-            <ModelPicker width={320} />
-          </Flex>
           {status === 'none' && (
             <div className="panel" style={{ padding: 16 }}>
               <KeyForm />
@@ -218,7 +231,7 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
             <Flex justify="space-between" wrap gap={8}>
               <span>
                 <b>{companies.length.toLocaleString()}</b> {companies.length === 1 ? 'company' : 'companies'} for{' '}
-                {companies.reduce((n, c) => n + c.people.length, 0).toLocaleString()} people
+                {peopleCount.toLocaleString()} {peopleCount === 1 ? 'person' : 'people'}
               </span>
               <span>
                 Estimated AI cost{' '}
@@ -227,10 +240,8 @@ export function ResearchModal({ shown, selected, onClose }: Props) {
               </span>
             </Flex>
             <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 2 }}>
-              Each company takes roughly 5,000 AI tokens and 10–20 seconds. On a free Groq key (8,000 tokens a minute,
-              200,000 a day) that’s about 1–2 companies a minute and ~40 a day — research your shortlist first.
-              {web &&
-                ' With web search, four companies run at a time. With the company key, it stops at today’s limit; run it again tomorrow and finished companies are skipped.'}
+              Each company takes about 20–40 seconds; four run at a time. Work stops at today’s AI limit and continues
+              next time, skipping companies already done.
               {plan.noCompany > 0 && ` ${plan.noCompany.toLocaleString()} people have no company and are skipped.`}
             </Typography.Text>
           </div>

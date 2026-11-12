@@ -23,6 +23,33 @@ export type LeadStatus = (typeof STATUSES)[number]
 export type ContactSource = (typeof SOURCES)[number]
 export type Priority = (typeof PRIORITIES)[number]
 
+/** One condition of a search, checked for one person. */
+export const CheckSchema = z.object({
+  criterion: z.string().max(200),
+  status: z.enum(['met', 'not_met', 'unknown']),
+  evidence: z.string().max(300),
+})
+export type Check = z.infer<typeof CheckSchema>
+
+/** One step of a search run, shown as it happens and kept with the run. */
+export const LogStepSchema = z.object({
+  at: z.string(),
+  kind: z.enum(['check', 'company', 'web', 'registry', 'person', 'linkedin', 'score', 'done']),
+  text: z.string().max(300),
+})
+export type LogStep = z.infer<typeof LogStepSchema>
+
+/** A problem with how a search prompt is written. */
+export const PromptIssueSchema = z.object({
+  severity: z.enum(['error', 'warning', 'info']),
+  text: z.string().max(300),
+  fix: z.string().max(300).optional(),
+})
+export type PromptIssue = z.infer<typeof PromptIssueSchema>
+
+/** A named thing with the page that names it. */
+const Named = z.object({ name: z.string().max(120), url: z.string().max(500) })
+
 export const ContactSchema = z.object({
   id: z.string().min(1).max(64),
   firstName: z.string().max(200),
@@ -154,14 +181,61 @@ export const ContactSchema = z.object({
             postedAt: z.string().max(40).optional(),
             /** Where it was found, e.g. "Workday", "Greenhouse", "Careers page". */
             source: z.string().max(40).optional(),
+            /** Technologies and skills the ad asks for. */
+            skills: z.array(z.string().max(40)).max(12).optional(),
+            /** One or two sentences on what the job involves. */
+            summary: z.string().max(400).optional(),
+            team: z.string().max(80).optional(),
+            /** Full-time, part-time, contract, internship. */
+            type: z.string().max(40).optional(),
+            /** Intern, junior, mid, senior, lead, manager, director. */
+            level: z.string().max(40).optional(),
+            /** Salary range when the listing gives one, e.g. "$120,000–$150,000". */
+            salary: z.string().max(60).optional(),
           }),
         )
-        .max(15)
+        .max(40)
         .optional(),
       /** All open roles found on the job board. */
       jobsTotal: z.number().int().nonnegative().optional(),
       summary: z.string().max(600).optional(),
-      sources: z.array(z.string().max(500)).max(10).optional(),
+      /** What the company sells: services, products and solutions. */
+      services: z.array(Named).max(20).optional(),
+      /** Customers named on case studies, client lists or news. */
+      clients: z.array(Named).max(20).optional(),
+      /** Vendor partnerships and tiers, e.g. "Microsoft Solutions Partner", "AWS Advanced Partner". */
+      partners: z.array(Named).max(15).optional(),
+      /** Certifications such as ISO 27001 or CMMI. */
+      certifications: z.array(Named).max(10).optional(),
+      /** Offices and countries the company works in. */
+      offices: z.array(Named).max(15).optional(),
+      founded: z.object({ value: z.string().max(40), url: z.string().max(500) }).optional(),
+      /** When the company's public LinkedIn page and job posts were last searched. */
+      linkedinAt: z.string().optional(),
+      /** Official registration facts (SEC EDGAR, for US public companies). */
+      registry: z
+        .object({
+          name: z.string().max(200),
+          ticker: z.string().max(20).optional(),
+          exchange: z.string().max(40).optional(),
+          industry: z.string().max(200).optional(),
+          address: z.string().max(300).optional(),
+          phone: z.string().max(40).optional(),
+          formerNames: z.array(z.string().max(200)).max(5).optional(),
+          url: z.string().max(500),
+        })
+        .optional(),
+      /** Named leaders (CEO, CTO, CIO…), work titles only. */
+      leaders: z
+        .array(z.object({ name: z.string().max(120), title: z.string().max(120), url: z.string().max(500) }))
+        .max(12)
+        .optional(),
+      /** Recent news and signals: funding, expansion, new contracts, projects, launches. */
+      news: z
+        .array(z.object({ text: z.string().max(300), date: z.string().max(40).optional(), url: z.string().max(500) }))
+        .max(10)
+        .optional(),
+      sources: z.array(z.string().max(500)).max(30).optional(),
       note: z.string().max(300).optional(),
       model: z.string().max(60).optional(),
       at: z.string(),
@@ -179,7 +253,7 @@ export const ContactSchema = z.object({
       summary: z.string().max(400).optional(),
       location: z.string().max(200).optional(),
       /** Skills, industries, technologies and topics the person is known for. */
-      keywords: z.array(z.string().max(60)).max(15).optional(),
+      keywords: z.array(z.string().max(60)).max(25).optional(),
       /** Current and past employers the pages mention. */
       career: z
         .array(
@@ -190,10 +264,72 @@ export const ContactSchema = z.object({
             url: z.string().max(500),
           }),
         )
+        .max(15)
+        .optional(),
+      /** Degrees and schools, as public bios state them. */
+      education: z
+        .array(
+          z.object({
+            school: z.string().max(160),
+            degree: z.string().max(160).optional(),
+            years: z.string().max(40).optional(),
+            url: z.string().max(500),
+          }),
+        )
+        .max(6)
+        .optional(),
+      /** Professional certifications, e.g. "AWS Solutions Architect", "PMP". */
+      certifications: z.array(Named).max(12).optional(),
+      /** Projects they worked on or led, as public pages describe them. */
+      projects: z
+        .array(
+          z.object({
+            name: z.string().max(160),
+            role: z.string().max(120).optional(),
+            company: z.string().max(120).optional(),
+            summary: z.string().max(300).optional(),
+            url: z.string().max(500),
+          }),
+        )
         .max(10)
         .optional(),
-      facts: z.array(z.object({ text: z.string().max(300), url: z.string().max(500) })).max(8).optional(),
-      sources: z.array(z.string().max(500)).max(10).optional(),
+      /** When the person's public LinkedIn profile was last searched. */
+      linkedinAt: z.string().optional(),
+      /** Work email and phone, only when published on a public page (never guessed, never webmail). */
+      email: z
+        .object({ value: z.string().max(200), url: z.string().max(500), basis: z.string().max(120).optional() })
+        .optional(),
+      phone: z.object({ value: z.string().max(40), url: z.string().max(500) }).optional(),
+      /** GitHub username and what its public profile shows. */
+      github: z.string().max(39).optional(),
+      githubProfile: z
+        .object({
+          bio: z.string().max(300).optional(),
+          company: z.string().max(120).optional(),
+          blog: z.string().max(300).optional(),
+          publicRepos: z.number().int().nonnegative().optional(),
+          followers: z.number().int().nonnegative().optional(),
+          languages: z.array(z.string().max(40)).max(15).optional(),
+          repos: z
+            .array(
+              z.object({
+                name: z.string().max(120),
+                description: z.string().max(300).optional(),
+                language: z.string().max(40).optional(),
+                stars: z.number().int().nonnegative().optional(),
+                url: z.string().max(500),
+              }),
+            )
+            .max(10)
+            .optional(),
+        })
+        .optional(),
+      /** Talks, articles, interviews, awards and other public professional activity. */
+      facts: z
+        .array(z.object({ text: z.string().max(300), url: z.string().max(500) }))
+        .max(15)
+        .optional(),
+      sources: z.array(z.string().max(500)).max(30).optional(),
       note: z.string().max(300).optional(),
       model: z.string().max(60).optional(),
       at: z.string(),
@@ -218,6 +354,10 @@ export const ContactSchema = z.object({
       confirmed: z.array(z.string().max(200)).max(10),
       /** Educated guesses (e.g. about the company's needs) to verify before relying on them. */
       inferred: z.array(z.string().max(300)).max(10),
+      /** Each condition of the search, checked against this person's data. */
+      checks: z.array(CheckSchema).max(8).optional(),
+      /** What data was missing for a confident answer. */
+      missing: z.string().max(300).optional(),
       model: z.string().max(60),
       at: z.string(),
     })
@@ -255,8 +395,17 @@ export const ScoreRunSchema = z.object({
       score: z.number(),
       priority: z.enum(PRIORITIES),
       reason: z.string(),
+      checks: z.array(CheckSchema).optional(),
+      missing: z.string().optional(),
     }),
   ),
+  /** The conditions the prompt was split into. */
+  criteria: z.array(z.string().max(200)).max(8).optional(),
+  promptIssues: z.array(PromptIssueSchema).max(10).optional(),
+  /** What was re-collected from the web just before scoring. */
+  refreshed: z.object({ companies: z.number().int(), people: z.number().int() }).optional(),
+  /** Every step the run took. */
+  log: z.array(LogStepSchema).max(400).optional(),
 })
 export type ScoreRun = z.infer<typeof ScoreRunSchema>
 

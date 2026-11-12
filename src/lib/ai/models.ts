@@ -253,6 +253,24 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<Provider, string> = {
 
 export const DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.anthropic
 
+/**
+ * The low-cost model that reads crawled company pages into fields. The answer is on the page and every
+ * value needs a quote, so a small model does this well; search and scoring keep the main model.
+ */
+export const EXTRACT_MODEL_BY_PROVIDER: Record<Provider, string> = {
+  anthropic: 'claude-haiku-5-5',
+  openai: 'gpt-6-luna',
+  gemini: 'gemini-2.5-flash-lite',
+  groq: 'openai/gpt-oss-20b',
+  openrouter: 'openrouter/openai/gpt-oss-120b',
+}
+
+/** The extraction model for whichever provider `model` belongs to. */
+export function extractModelFor(model: string): string {
+  const provider = allModels().find((m) => m.id === model)?.provider
+  return provider ? EXTRACT_MODEL_BY_PROVIDER[provider] : model
+}
+
 // --- models you add ---------------------------------------------------------------------------
 
 /** Models added by ID or from a provider's list. Kept with the AI settings; registered on load. */

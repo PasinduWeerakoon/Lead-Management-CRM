@@ -1083,3 +1083,42 @@ button.crumb:hover {
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* Connections: list and person panel side by side. */
+.connections-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Phones: the Connections list and the person panel stack and the page scrolls as one. */
+@media (max-width: 767px) {
+  .connections-layout {
+    overflow-y: auto;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .connections-layout > section,
+  .connections-layout > aside {
+    height: auto !important;
+    overflow: visible !important;
+    max-width: none !important;
+    flex: none !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-left: 0 !important;
+  }
+  .connections-layout > aside {
+    border-top: 1px solid var(--border);
+  }
+  .screen-body,
+  .connections-layout > section {
+    padding-top: 56px !important;
+  }
+}
+
+/* A spinning icon for the step that's running now. */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin svg { animation: spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin svg { animation: none; } }

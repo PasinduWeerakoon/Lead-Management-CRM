@@ -37,6 +37,12 @@ const out = (o: Partial<WebOutput> = {}): WebOutput => ({
     },
     { company: 'Invented Co', role: null, years: null, url: 'https://made-up.example.net/' },
   ],
+  education: [],
+  certifications: [],
+  projects: [],
+  work_email: null,
+  work_phone: null,
+  github: null,
   keywords: ['Digital transformation', 'Fintech', 'digital transformation'],
   facts: [
     { text: 'Leads Example Holdings as CEO since 2019.', url: 'https://example.com/team' },
@@ -45,7 +51,12 @@ const out = (o: Partial<WebOutput> = {}): WebOutput => ({
   ...o,
 })
 
-const sources = ['https://www.example.com/team', 'https://news.example.org/summit', 'https://lk.linkedin.com/in/x']
+const sources = [
+  'https://www.example.com/team',
+  'https://news.example.org/summit',
+  'https://lk.linkedin.com/in/x',
+  'https://www.indeed.com/cmp/x',
+]
 
 describe('web research checks', () => {
   it('keeps facts from pages the search returned and dedupes keywords', () => {
@@ -56,12 +67,13 @@ describe('web research checks', () => {
     expect(w.keywords).toEqual(['Digital transformation', 'Fintech'])
   })
 
-  it('drops LinkedIn, made-up pages and personal details', () => {
+  it('keeps public LinkedIn pages, drops Indeed, made-up pages and personal details', () => {
     const w = validateWeb(
       out({
         location: { value: 'Kandy', url: 'https://made-up.example.net/' },
         facts: [
           { text: 'Profile.', url: 'https://lk.linkedin.com/in/x' },
+          { text: 'Reviews.', url: 'https://www.indeed.com/cmp/x' },
           { text: 'Invented.', url: 'https://made-up.example.net/' },
           { text: 'Email alex@example.com', url: 'https://example.com/team' },
           { text: 'Leads Example Holdings.', url: 'https://example.com/team' },
@@ -70,7 +82,7 @@ describe('web research checks', () => {
       sources,
       'gpt-6-luna',
     )
-    expect(w.facts?.map((f) => f.text)).toEqual(['Leads Example Holdings.'])
+    expect(w.facts?.map((f) => f.text)).toEqual(['Profile.', 'Leads Example Holdings.'])
     expect(w.location).toBeUndefined()
   })
 
@@ -139,7 +151,7 @@ describe('/api/ai?op=search', () => {
     expect(url).toBe('https://api.openai.com/v1/responses')
     const sent = JSON.parse(String(init.body)) as { tools: unknown; max_tool_calls: number }
     expect(sent.tools).toEqual([{ type: 'web_search' }])
-    expect(sent.max_tool_calls).toBe(2)
+    expect(sent.max_tool_calls).toBe(6)
     // 10k in × $0.1/M + 1k out × $0.5/M + 2 searches
     expect(await store.get(spendDay())).toBeCloseTo(0.001 + 0.0005 + 2 * WEB_SEARCH_USD, 6)
   })
@@ -171,11 +183,49 @@ describe('company web search', () => {
     size: null,
     technologies: [{ name: 'AWS', url: 'https://example.lk/' }],
     hiring: [
-      { title: 'Senior Full Stack Engineer', url: 'https://jobs.example.org/123', location: 'Colombo', postedAt: null },
-      { title: 'QA Engineer', url: 'https://www.linkedin.com/jobs/view/1', location: null, postedAt: null },
-      { title: 'DevOps Engineer', url: 'https://made-up.example.net/job', location: null, postedAt: null },
+      {
+        title: 'Senior Full Stack Engineer',
+        url: 'https://jobs.example.org/123',
+        location: 'Colombo',
+        postedAt: null,
+        skills: [],
+        summary: null,
+        team: null,
+        type: null,
+        level: null,
+      },
+      {
+        title: 'QA Engineer',
+        url: 'https://www.linkedin.com/jobs/view/1',
+        location: null,
+        postedAt: null,
+        skills: [],
+        summary: null,
+        team: null,
+        type: null,
+        level: null,
+      },
+      {
+        title: 'DevOps Engineer',
+        url: 'https://made-up.example.net/job',
+        location: null,
+        postedAt: null,
+        skills: [],
+        summary: null,
+        team: null,
+        type: null,
+        level: null,
+      },
     ],
     summary: 'Builds software for banks.',
+    founded: null,
+    services: [],
+    clients: [],
+    partners: [],
+    certifications: [],
+    offices: [],
+    leaders: [],
+    news: [],
     ...o,
   })
   const found = [
@@ -185,11 +235,11 @@ describe('company web search', () => {
     'https://www.linkedin.com/jobs/view/1',
   ]
 
-  it('keeps only backed facts and never LinkedIn jobs', () => {
+  it('keeps only backed facts, including public LinkedIn job posts', () => {
     const r = validateCompanyWeb(company(), found)!
     expect(r.domain).toBe('example.lk')
     expect(r.hq?.value).toBe('Colombo, Sri Lanka')
-    expect(r.hiring?.map((j) => j.title)).toEqual(['Senior Full Stack Engineer'])
+    expect(r.hiring?.map((j) => j.title)).toEqual(['Senior Full Stack Engineer', 'QA Engineer'])
     expect(r.technologies?.map((t) => t.name)).toEqual(['AWS'])
   })
 
@@ -209,6 +259,6 @@ describe('company web search', () => {
     )
     expect(merged.hq?.value).toBe('Kandy')
     expect(merged.industry?.value).toBe('Software services')
-    expect(merged.hiring?.map((j) => j.title)).toEqual(['QA Lead', 'Senior Full Stack Engineer'])
+    expect(merged.hiring?.map((j) => j.title)).toEqual(['QA Lead', 'Senior Full Stack Engineer', 'QA Engineer'])
   })
 })

@@ -101,7 +101,7 @@ export function EnrichPage() {
 
   return (
     <div className="screen">
-      <TopBar crumbs={[{ label: 'Import' }, { label: 'Company data', icon: <BankOutlined /> }]} />
+      <TopBar crumbs={[{ label: '2 Collect web data' }, { label: 'Add data from a CSV', icon: <BankOutlined /> }]} />
       <div className="screen-body">
         <div className="screen-narrow" style={{ maxWidth: 920 }}>
           <PageHeader

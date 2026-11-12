@@ -1,7 +1,13 @@
 import Dexie, { type EntityTable, type Transaction } from 'dexie'
 import type { Brief, Contact, ImportRecord, ScoreRun } from './schemas'
 import type { KeywordPack, SavedPreset, SavedView } from './filters/schema'
-import { BUILT_IN_PACKS, builtInPresetId, builtInPresetRecords, KEPT_PRESET_KEYS, PRESETS_ADDED_IN_V6 } from './filters/presets'
+import {
+  BUILT_IN_PACKS,
+  builtInPresetId,
+  builtInPresetRecords,
+  KEPT_PRESET_KEYS,
+  PRESETS_ADDED_IN_V6,
+} from './filters/presets'
 import type { AiUsageRecord } from './ai/settings'
 import { SAMPLE_BRIEFS, sampleBriefRecords } from './ai/sample-briefs'
 import { markQuiet } from './sync/marks'
@@ -121,8 +127,14 @@ db.version(10)
   .upgrade(async (tx) => {
     const keepPresets = new Set(KEPT_PRESET_KEYS.map(builtInPresetId))
     const keepBriefs = new Set(SAMPLE_BRIEFS.map((b) => b.id))
-    await tx.table('presets').filter((p: SavedPreset) => !keepPresets.has(p.id)).delete()
-    await tx.table('briefs').filter((b: Brief) => !keepBriefs.has(b.id)).delete()
+    await tx
+      .table('presets')
+      .filter((p: SavedPreset) => !keepPresets.has(p.id))
+      .delete()
+    await tx
+      .table('briefs')
+      .filter((b: Brief) => !keepBriefs.has(b.id))
+      .delete()
   })
 
 // Keeps each scoring run's results, so later runs don't replace them.

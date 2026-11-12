@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import {
+  IconHome,
   IconAlertCircle,
   IconArrowBackUp,
   IconArrowsSort,
@@ -104,6 +105,7 @@ function make(Icon: TablerIcon, stroke = 1.5) {
 
 // Navigation & people
 export const UserOutlined = make(IconUser)
+export const HomeOutlined = make(IconHome)
 export const PersonCircleOutlined = make(IconUserCircle)
 export const TableOutlined = make(IconTable)
 export const SettingOutlined = make(IconSettings)

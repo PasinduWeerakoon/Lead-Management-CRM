@@ -1,175 +1,323 @@
 import { useMemo, useState } from 'react'
-import { App, Button, Empty, Flex, Input, Segmented, Table, Typography } from 'antd'
+import { App, Button, Empty, Flex, Input, Segmented, Tag, Typography } from 'antd'
 import Papa from 'papaparse'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { BulbOutlined, DeleteOutlined, DownloadOutlined, SearchOutlined } from '../../components/icons'
-import { TopBar } from '../../components/TopBar'
+import { useNavigate } from 'react-router-dom'
+import { DeleteOutlined, DownloadOutlined, SearchOutlined } from '../../components/icons'
 import { PageHeader } from '../../components/PageHeader'
-import { Dot, PRIORITY_DOT } from '../../components/tags'
 import { db } from '../../lib/db'
 import { formatDate, relativeTime } from '../../lib/format'
 import { downloadFile } from '../../lib/files'
 import { neutralizeFormula, safeFileName } from '../../lib/export/rows'
-import { PRIORITIES, type Priority, type ScoreRun } from '../../lib/schemas'
+import type { Contact, ScoreRun } from '../../lib/schemas'
+import { OpportunityDetail, promptTerms } from './opportunities'
+import { IssueList } from './PromptIssues'
+import { ActivityLog } from './ActivityLog'
+import { WhyPanel } from './WhyPanel'
+import { ResultCard } from './ResultCard'
 
-type Show = Priority | 'All'
+type Show = 'shortlist' | 'new' | 'unknown' | 'low' | 'all'
+type Person = ScoreRun['people'][number]
 
-const count = (r: ScoreRun, p: Priority) => r.people.filter((x) => x.priority === p).length
+/** One saved search: every run of the same prompt, newest first. */
+interface Search {
+  key: string
+  name: string
+  prompt: string
+  runs: ScoreRun[]
+}
 
-/** Every "Score with AI" run, kept as it was, so each prompt's shortlist can be opened again later. */
+export const onShortlist = (p: Person) => p.priority === 'High' || p.priority === 'Medium'
+/** Off the shortlist only because data was missing for a condition, not because it failed one. */
+const couldntCheck = (p: Person) =>
+  !onShortlist(p) && !!p.checks?.some((c) => c.status === 'unknown') && !p.checks.some((c) => c.status === 'not_met')
+const PAGE = 20
+
+/** Runs grouped by the prompt they used, so each prompt keeps its own history. */
+export function groupSearches(runs: ScoreRun[]): Search[] {
+  const map = new Map<string, Search>()
+  for (const r of [...runs].sort((a, b) => b.at.localeCompare(a.at))) {
+    const key = `${r.briefId}\u0000${r.briefText}`
+    const s = map.get(key) ?? { key, name: r.briefName, prompt: r.briefText, runs: [] }
+    s.runs.push(r)
+    map.set(key, s)
+  }
+  return [...map.values()]
+}
+
+/** People on this run's shortlist who weren't on the previous run's. */
+export function newSince(run: ScoreRun, previous?: ScoreRun): Set<string> {
+  const before = new Set((previous?.people ?? []).filter(onShortlist).map((p) => p.id))
+  return new Set(run.people.filter((p) => onShortlist(p) && !before.has(p.id)).map((p) => p.id))
+}
+
+/**
+ * Searches: each prompt with its saved runs. A run shows the prompt's conditions and any problems
+ * with it, why there are few results, and a card per person with every condition checked, the
+ * reasoning and the matching opportunities. Running again adds a run; older runs are kept.
+ */
 export function ResultsPage() {
   const { modal } = App.useApp()
-  const runs = useLiveQuery(() => db.scoreRuns.orderBy('at').reverse().toArray(), [], [] as ScoreRun[])
-  const [openId, setOpenId] = useState<string>()
-  const [show, setShow] = useState<Show>('High')
+  const navigate = useNavigate()
+  const runs = useLiveQuery(() => db.scoreRuns.toArray(), [], [] as ScoreRun[])
+  const searches = useMemo(() => groupSearches(runs), [runs])
+  const [openKey, setOpenKey] = useState<string>()
+  const [runId, setRunId] = useState<string>()
+  const [show, setShow] = useState<Show>('shortlist')
   const [q, setQ] = useState('')
-  const run = runs.find((r) => r.id === openId) ?? runs[0]
+  const [limit, setLimit] = useState(PAGE)
 
+  const search = searches.find((s) => s.key === openKey) ?? searches[0]
+  const runIndex = Math.max(0, search?.runs.findIndex((r) => r.id === runId) ?? 0)
+  const run = search?.runs[runIndex]
+  const fresh = useMemo(
+    () => (run ? newSince(run, search?.runs[runIndex + 1]) : new Set<string>()),
+    [run, search, runIndex],
+  )
+  const ids = useMemo(() => run?.people.map((p) => p.id) ?? [], [run])
+  const people = useLiveQuery(
+    async () => new Map((await db.contacts.bulkGet(ids)).filter((c): c is Contact => !!c).map((c) => [c.id, c])),
+    [ids],
+    new Map<string, Contact>(),
+  )
+  const terms = useMemo(() => promptTerms(search?.prompt ?? ''), [search])
+
+  const shortlist = run ? run.people.filter(onShortlist).length : 0
   const rows = useMemo(() => {
     if (!run) return []
     const needle = q.trim().toLowerCase()
     return run.people
-      .filter((p) => show === 'All' || p.priority === show)
+      .filter((p) =>
+        show === 'shortlist'
+          ? onShortlist(p)
+          : show === 'new'
+            ? fresh.has(p.id)
+            : show === 'unknown'
+              ? couldntCheck(p)
+              : show === 'low'
+                ? !onShortlist(p) && !couldntCheck(p)
+                : true,
+      )
       .filter((p) => !needle || `${p.name} ${p.position ?? ''} ${p.company ?? ''}`.toLowerCase().includes(needle))
       .sort((a, b) => b.score - a.score)
-  }, [run, show, q])
+  }, [run, show, q, fresh])
 
   const exportCsv = () => {
     if (!run) return
     const data = rows.map((p) =>
-      [p.name, p.position ?? '', p.company ?? '', String(p.score), p.priority, p.reason].map(neutralizeFormula),
+      [
+        p.name,
+        p.position ?? '',
+        p.company ?? '',
+        String(p.score),
+        p.reason,
+        (p.checks ?? []).map((c) => `${c.criterion}: ${c.status}`).join(' | '),
+        p.missing ?? '',
+      ].map(neutralizeFormula),
     )
-    const csv = Papa.unparse({ fields: ['Name', 'Title', 'Company', 'Score', 'Priority', 'Why'], data })
+    const csv = Papa.unparse({
+      fields: ['Name', 'Title', 'Company', 'AI score', 'AI reasoning', 'Conditions', 'Missing data'],
+      data,
+    })
     downloadFile('﻿' + csv, `${safeFileName(`${run.briefName} ${run.at.slice(0, 10)}`)}.csv`, 'text/csv;charset=utf-8')
   }
 
-  const remove = (r: ScoreRun) =>
+  const removeRun = (r: ScoreRun) =>
     modal.confirm({
-      title: `Delete this “${r.briefName}” result?`,
-      content: 'Only this saved result is removed. People and their current scores stay.',
-      okText: 'Delete result',
+      title: 'Delete this run?',
+      content: `The ${formatDate(r.at)} run of “${r.briefName}” is removed. Other runs, your connections and web data stay.`,
+      okText: 'Delete run',
       okButtonProps: { danger: true },
-      onOk: () => db.scoreRuns.delete(r.id),
+      onOk: async () => {
+        await db.scoreRuns.delete(r.id)
+        setRunId(undefined)
+      },
     })
+
+  const pick = (key: string) => {
+    setOpenKey(key)
+    setRunId(undefined)
+    setShow('shortlist')
+    setLimit(PAGE)
+  }
 
   return (
     <div className="screen">
-      <TopBar crumbs={[{ label: 'Workspace' }, { label: 'AI results', icon: <BulbOutlined /> }]} />
       <div className="screen-body">
-        <Flex vertical gap={20} style={{ maxWidth: 1180, margin: '0 auto' }}>
-          <PageHeader
-            title="AI results"
-            description="Every prompt you score with is saved here with its own shortlist. New runs never change older results."
-          />
-          {!runs.length ? (
+        <Flex vertical gap={20} style={{ maxWidth: 1240, margin: '0 auto' }}>
+          <Flex justify="space-between" align="flex-start" gap={12} wrap>
+            <PageHeader
+              title="Searches"
+              description="Each prompt keeps every run. Open a run to see who matched, why, and what openings their company has."
+            />
+            <Button type="primary" onClick={() => navigate('/results/new')}>
+              New search
+            </Button>
+          </Flex>
+
+          {!search || !run ? (
             <div className="panel" style={{ padding: 40 }}>
-              <Empty description="No results yet. Use “Score with AI” on the People page and each run appears here." />
+              <Empty description="No searches yet. Collect web data first, then start a new search." />
             </div>
           ) : (
             <Flex gap={20} align="flex-start" wrap>
-              <div className="panel" style={{ flex: '1 1 280px', maxWidth: 360, minWidth: 0 }}>
-                {runs.map((r, i) => {
-                  const active = r.id === run?.id
+              <nav
+                aria-label="Saved searches"
+                className="panel"
+                style={{ flex: '1 1 240px', maxWidth: 300, minWidth: 0 }}
+              >
+                {searches.map((s, i) => {
+                  const active = s.key === search.key
+                  const latest = s.runs[0]
                   return (
-                    <div
-                      key={r.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setOpenId(r.id)}
-                      onKeyDown={(e) => e.key === 'Enter' && setOpenId(r.id)}
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => pick(s.key)}
                       style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4,
+                        width: '100%',
+                        textAlign: 'left',
                         padding: '12px 16px',
-                        cursor: 'pointer',
+                        border: 0,
                         borderTop: i ? '1px solid var(--border-subtle)' : undefined,
-                        background: active ? 'var(--bg-hover)' : undefined,
+                        background: active ? 'var(--primary-soft)' : 'transparent',
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        color: 'inherit',
                       }}
                     >
-                      <div style={{ fontWeight: 600, color: 'var(--ink)' }}>{r.briefName}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                        {formatDate(r.at)} · {relativeTime(r.at)}
-                      </div>
-                      <Flex gap={12} style={{ fontSize: 12, marginTop: 6 }}>
-                        {PRIORITIES.map((p) => (
-                          <span key={p}>
-                            <Dot color={PRIORITY_DOT[p]} /> {count(r, p)} {p}
-                          </span>
-                        ))}
-                      </Flex>
-                    </div>
+                      <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{s.name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        {latest.people.filter(onShortlist).length} shortlisted · {s.runs.length}{' '}
+                        {s.runs.length === 1 ? 'run' : 'runs'} · {relativeTime(latest.at)}
+                      </span>
+                    </button>
                   )
                 })}
-              </div>
+              </nav>
 
-              {run && (
-                <div className="panel" style={{ flex: '3 1 520px', minWidth: 0, padding: 16 }}>
+              <section style={{ flex: '3 1 600px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* 1. What was asked */}
+                <div className="panel" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <Flex justify="space-between" align="flex-start" gap={12} wrap>
-                    <div style={{ minWidth: 0 }}>
-                      <Typography.Title level={5} style={{ margin: 0 }}>
-                        {run.briefName}
-                      </Typography.Title>
-                      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-                        {run.people.length.toLocaleString()} of {run.total.toLocaleString()} people scored on{' '}
-                        {formatDate(run.at)}
-                      </Typography.Text>
-                    </div>
+                    <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--ink)' }}>{search.name}</h2>
                     <Flex gap={8}>
+                      <Button onClick={() => navigate(`/results/new?search=${run.briefId}`)}>Edit and run again</Button>
                       <Button icon={<DownloadOutlined />} onClick={exportCsv} disabled={!rows.length}>
-                        Export CSV
+                        Export
                       </Button>
-                      <Button icon={<DeleteOutlined />} onClick={() => remove(run)} aria-label="Delete result" />
+                      <Button icon={<DeleteOutlined />} onClick={() => removeRun(run)} aria-label="Delete this run" />
                     </Flex>
                   </Flex>
                   <Typography.Paragraph
-                    type="secondary"
-                    ellipsis={{ rows: 2, expandable: true, symbol: 'Show prompt' }}
-                    style={{ fontSize: 13, margin: '10px 0', whiteSpace: 'pre-line' }}
+                    ellipsis={{ rows: 3, expandable: true, symbol: 'Show all' }}
+                    style={{ margin: 0, whiteSpace: 'pre-line', color: 'var(--text-2)' }}
                   >
-                    {run.briefText}
+                    {search.prompt}
                   </Typography.Paragraph>
-                  <Flex gap={8} wrap style={{ marginBottom: 12 }}>
-                    <Segmented<Show>
-                      value={show}
-                      onChange={setShow}
-                      options={[...PRIORITIES, 'All'].map((p) => ({
-                        value: p as Show,
-                        label: p === 'All' ? `All ${run.people.length}` : `${p} ${count(run, p as Priority)}`,
-                      }))}
-                    />
-                    <Input
-                      allowClear
-                      prefix={<SearchOutlined />}
-                      placeholder="Search name, title or company"
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      style={{ maxWidth: 280 }}
-                    />
+                  {!!run.criteria?.length && (
+                    <Flex vertical gap={6}>
+                      <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Conditions checked for each person</span>
+                      {run.criteria.map((c, i) => (
+                        <Flex key={i} gap={8} align="baseline">
+                          <Tag style={{ margin: 0 }}>{i + 1}</Tag>
+                          <span style={{ fontSize: 13.5 }}>{c}</span>
+                        </Flex>
+                      ))}
+                    </Flex>
+                  )}
+                  {!!run.promptIssues?.length && <IssueList issues={run.promptIssues} />}
+                  <Flex gap={6} align="center" wrap>
+                    <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Runs</span>
+                    {search.runs.map((r) => (
+                      <Tag.CheckableTag
+                        key={r.id}
+                        checked={r.id === run.id}
+                        onChange={() => {
+                          setRunId(r.id)
+                          setShow('shortlist')
+                          setLimit(PAGE)
+                        }}
+                      >
+                        {formatDate(r.at)} · {r.people.filter(onShortlist).length}
+                      </Tag.CheckableTag>
+                    ))}
+                    {run.refreshed && (
+                      <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+                        · Web data refreshed for {run.refreshed.companies} companies and {run.refreshed.people} people
+                        before this run
+                      </span>
+                    )}
                   </Flex>
-                  <Table
-                    rowKey="id"
-                    size="small"
-                    dataSource={rows}
-                    pagination={{ pageSize: 50, hideOnSinglePage: true, showSizeChanger: false }}
-                    scroll={{ x: 760 }}
-                    locale={{ emptyText: `No ${show === 'All' ? '' : show + ' '}people in this result.` }}
-                    columns={[
-                      { title: 'Name', dataIndex: 'name', width: 180, render: (v: string) => <b>{v}</b> },
-                      { title: 'Title', dataIndex: 'position', width: 200, ellipsis: true },
-                      { title: 'Company', dataIndex: 'company', width: 160, ellipsis: true },
+                </div>
+
+                {!!run.log?.length && (
+                  <div className="panel" style={{ padding: '14px 18px' }}>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginBottom: 6 }}>How this search ran</div>
+                    <ActivityLog key={run.id} steps={run.log} />
+                  </div>
+                )}
+
+                {/* 2. Why the results look like this */}
+                <WhyPanel run={run} people={people} shortlist={shortlist} />
+
+                {/* 3. Who matched */}
+                <Flex gap={8} wrap align="center">
+                  <Segmented<Show>
+                    value={show}
+                    onChange={(v) => {
+                      setShow(v)
+                      setLimit(PAGE)
+                    }}
+                    options={[
+                      { value: 'shortlist', label: `Shortlisted ${shortlist}` },
+                      { value: 'new', label: `New ${fresh.size}` },
+                      { value: 'unknown', label: `Couldn’t check ${run.people.filter(couldntCheck).length}` },
                       {
-                        title: 'Score',
-                        dataIndex: 'score',
-                        width: 90,
-                        render: (v: number, p) => (
-                          <span className="num">
-                            <Dot color={PRIORITY_DOT[p.priority]} /> {v}
-                          </span>
-                        ),
+                        value: 'low',
+                        label: `Not a match ${run.people.filter((p) => !onShortlist(p) && !couldntCheck(p)).length}`,
                       },
-                      { title: 'Why', dataIndex: 'reason', ellipsis: true },
+                      { value: 'all', label: `All ${run.people.length}` },
                     ]}
                   />
-                </div>
-              )}
+                  <Input
+                    allowClear
+                    prefix={<SearchOutlined />}
+                    placeholder="Search name, title or company"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    style={{ maxWidth: 280 }}
+                  />
+                </Flex>
+
+                {rows.length === 0 ? (
+                  <div className="panel" style={{ padding: 24, color: 'var(--text-3)' }}>
+                    {show === 'shortlist'
+                      ? 'Nobody matched this prompt in this run. See “Why so few results” above for the reasons.'
+                      : 'Nobody in this group.'}
+                  </div>
+                ) : (
+                  rows
+                    .slice(0, limit)
+                    .map((p) => (
+                      <ResultCard
+                        key={p.id}
+                        person={p}
+                        contact={people.get(p.id)}
+                        isNew={fresh.has(p.id)}
+                        opportunities={<OpportunityDetail c={people.get(p.id)} terms={terms} />}
+                      />
+                    ))
+                )}
+                {rows.length > limit && (
+                  <Button onClick={() => setLimit((l) => l + PAGE)} style={{ alignSelf: 'center' }}>
+                    Show {Math.min(PAGE, rows.length - limit)} more
+                  </Button>
+                )}
+              </section>
             </Flex>
           )}
         </Flex>

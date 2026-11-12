@@ -122,6 +122,13 @@ export async function deleteProfile(id: string): Promise<void> {
   await removeLocalProfile(id)
 }
 
+/** Deletes every profile except the open one, with all their data (here and in the shared database). */
+export async function deleteOtherProfiles(): Promise<number> {
+  const others = (await appDb.profiles.toArray()).filter((p) => p.id !== activeProfileId())
+  for (const p of others) await deleteProfile(p.id)
+  return others.length
+}
+
 /** Removes a profile database left over from deleting the open profile (runs at startup). */
 export async function finishPendingDeletes(): Promise<void> {
   const row = await appDb.settings.get('pendingProfileDbDelete')

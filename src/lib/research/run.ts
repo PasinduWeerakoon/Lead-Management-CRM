@@ -2,7 +2,7 @@ import { companyKey, domainOf, rank } from '../company-hq'
 import { db } from '../db'
 import type { Contact } from '../schemas'
 import { AiError, structuredCall } from '../ai/provider'
-import type { Effort } from '../ai/models'
+import { extractModelFor, type Effort } from '../ai/models'
 import { recordUsage } from '../ai/settings'
 import { readSiteRemote, type SiteResponse } from './api'
 import {
@@ -17,7 +17,8 @@ import {
   validateExtract,
   type CompanyResearch,
 } from './extract'
-import { mergeResearch, searchCompany } from './company-web'
+import { mergeResearch, searchCompany, splitOwnProducts } from './company-web'
+import { fetchCompanyExtras, mergeExtras } from './sources'
 import { WEB_MODEL, WEB_SEARCH_USD } from './person'
 const DOMAIN_BATCH = 20
 const RATE_WAITS_MS = [20_000, 40_000, 60_000]
@@ -30,6 +31,10 @@ export interface ResearchCompany {
   people: Contact[]
 }
 
+/** "Self-employed", "Stealth startup", "Freelance"…: not a company anyone can look up. */
+export const PLACEHOLDER_COMPANY =
+  /^\s*(self[\s-]?employed|freelanc\w*|independent( consultant| contractor)?|stealth( mode| startup| start-up| company)?|retired|student|unemployed|open to work|looking for (new )?opportunities|confidential|private|n\/?a|none|-+|various|career break|sabbatical)\s*$/i
+
 /** Companies to research for these people (one per company; people without a company are skipped). */
 export function planResearch(people: Contact[], redo = false): { companies: ResearchCompany[]; noCompany: number } {
   const groups = new Map<string, ResearchCompany>()
@@ -38,7 +43,7 @@ export function planResearch(people: Contact[], redo = false): { companies: Rese
     // Failed attempts are always tried again; finished ones only when redoing.
     if (c.research && c.research.status !== 'error' && !redo) continue
     const key = companyKey(c)
-    if (!key || !c.company) {
+    if (!key || !c.company || PLACEHOLDER_COMPANY.test(c.company)) {
       noCompany++
       continue
     }
@@ -81,6 +86,8 @@ interface RunOptions {
    * doesn't list. Runs a few companies at a time.
    */
   web?: { provider: string }
+  /** Copy fresh research from other people at the same company instead of researching again (default on). */
+  reuse?: boolean
   /** Overridable in tests. */
   waitsMs?: number[]
 }
@@ -99,6 +106,19 @@ function pause(ms: number, signal: AbortSignal) {
  * website, industry, size and company HQ (never replacing what you typed, imported or got from Apollo).
  */
 export function applyResearch(c: Contact, r: CompanyResearch): Contact {
+  // A new attempt that finds nothing (site down, search empty) never replaces what was found before.
+  if (r.status !== 'found' && c.research?.status === 'found') return c
+  // New findings are added to what was found before (newer values win, lists are joined), so each
+  // run builds on the last instead of losing what an earlier search happened to find.
+  if (r.status === 'found' && c.research?.status === 'found') {
+    const { status: _s, at: _a, ...fresh } = r
+    const { status: _os, at: _oa, ...prev } = c.research
+    void _s
+    void _a
+    void _os
+    void _oa
+    r = { ...mergeResearch(fresh, prev), status: 'found', at: r.at }
+  }
   const next: Contact = { ...c, research: r }
   if (r.status !== 'found') return next
   const e = c.enrichment
@@ -129,8 +149,39 @@ async function save(company: ResearchCompany, r: CompanyResearch) {
 }
 
 /** Researches companies one by one; each company's findings are saved as soon as they're ready. */
+/**
+ * Companies already researched recently (for other people who work there) are copied to these people
+ * instead of being researched again. Returns the companies that still need research.
+ */
+export async function reuseFreshResearch(companies: ResearchCompany[], maxAgeDays = 7): Promise<ResearchCompany[]> {
+  const cutoff = Date.now() - maxAgeDays * 86_400_000
+  const known = new Map<string, CompanyResearch>()
+  for (const c of await db.contacts.toArray()) {
+    const r = c.research
+    const key = companyKey(c)
+    if (!key || !r || r.status === 'error' || Date.parse(r.at) < cutoff) continue
+    const prev = known.get(key)
+    if (!prev || r.at > prev.at) known.set(key, r)
+  }
+  const left: ResearchCompany[] = []
+  for (const company of companies) {
+    const r = known.get(company.key)
+    if (r) await save(company, r)
+    else left.push(company)
+  }
+  return left
+}
+
 export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
-  const companies = opts.companies
+  const companies = opts.reuse === false ? opts.companies : await reuseFreshResearch(opts.companies)
+  const reused = opts.companies.length - companies.length
+  if (reused)
+    opts.onProgress({
+      done: 0,
+      total: companies.length,
+      costUsd: 0,
+      step: `Reused recent data for ${reused} ${reused === 1 ? 'company' : 'companies'} already collected`,
+    })
   const summary: ResearchSummary = {
     done: 0,
     total: companies.length,
@@ -150,6 +201,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
     schema: Record<string, unknown>,
     parse: (v: unknown) => T,
     maxTokens: number,
+    model = opts.model,
   ): Promise<T> => {
     const waits = opts.waitsMs ?? RATE_WAITS_MS
     for (let attempt = 0; ; attempt++) {
@@ -157,7 +209,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
         await opts.beforeCall?.()
         const res = await structuredCall({
           apiKey: opts.apiKey,
-          model: opts.model,
+          model,
           effort: opts.effort,
           system,
           user,
@@ -270,6 +322,8 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
           EXTRACT_SCHEMA,
           (v) => ExtractOutput.parse(v),
           4000,
+          // Reading pages into quoted fields is simple, so it runs on the low-cost model.
+          extractModelFor(opts.model),
         )
         const { facts, dropped } = validateExtract(out, site.pages, site.jobs)
         summary.dropped += dropped
@@ -281,16 +335,17 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
             Object.entries(facts).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length)),
           ),
           jobsTotal: site.jobs.length,
-          model: opts.model.slice(0, 60),
+          model: extractModelFor(opts.model).slice(0, 60),
           ...(site.blocked.length
             ? { note: `Skipped ${site.blocked.length} page(s) the site asks bots not to read.` }
             : {}),
         }
       }
 
-      // The site alone often misses things: no readable site, or no open roles listed on it.
-      if (opts.web && (!found || !found.hiring?.length || !found.hq || !found.industry)) {
-        progress(`Searching the web for ${company.company}…`)
+      // Always search the web too: the site alone misses clients, partners, news, leaders and most
+      // job ads, and nobody can predict what people will later ask about a company.
+      if (opts.web) {
+        progress(`Searching the web and LinkedIn for ${company.company}…`)
         await opts.beforeCall?.()
         const res = await searchCompany({
           apiKey: opts.apiKey,
@@ -306,6 +361,10 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
         if (res.research) found = mergeResearch(found, res.research)
       }
 
+      // Free registries and job boards: SEC EDGAR, Wikidata, Adzuna.
+      progress(`Checking company registries and job boards for ${company.company}…`)
+      found = mergeExtras(found, await fetchCompanyExtras(company.company, found?.domain ?? domain, opts.signal))
+
       if (!found) {
         await save(company, {
           status: 'no_site',
@@ -317,10 +376,21 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
           at,
         })
         summary.noSite++
+        progress(`${company.company}: no website or public data found`)
         return
       }
-      await save(company, { status: 'found', ...found, at })
+      await save(company, { status: 'found', ...splitOwnProducts(company.company, found), at })
       summary.found++
+      progress(
+        `${company.company}: ${[
+          found.domain,
+          found.hiring?.length ? `${found.hiring.length} open jobs` : 'no open jobs listed',
+          found.technologies?.length ? `${found.technologies.length} technologies` : '',
+          found.registry ? 'SEC record' : '',
+        ]
+          .filter(Boolean)
+          .join(', ')}`,
+      )
     }
 
     await Promise.all(Array.from({ length: opts.web ? 4 : 1 }, worker))

@@ -23,14 +23,14 @@ describe('AWS Lambda entry', () => {
     expect((await handler(ev('/api/status', 'GET', { 'x-origin-verify': 'from-cloudfront' }))).statusCode).toBe(200)
   })
 
-  it('runs the same API routes on Lambda, with no access code', async () => {
+  it('runs the same API routes on Lambda, and refuses data until sign-in is set up', async () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'leads-api'
-    process.env.APP_ACCESS_KEY = 'open-sesame-123'
-    const status = await handler(ev('/api/status', 'GET', { 'x-app-key': 'open-sesame-123' }))
-    expect(JSON.parse(status.body)).toMatchObject({ accessRequired: false, accessOk: true })
-    const apollo = await handler(ev('/api/apollo', 'POST', { 'x-app-key': 'open-sesame-123' }, '{}'))
-    expect(apollo.statusCode).toBe(401) // no Apollo key in the request
-    expect((await handler(ev('/api/unknown', 'GET', { 'x-app-key': 'open-sesame-123' }))).statusCode).toBe(404)
+    const status = await handler(ev('/api/status', 'GET', {}))
+    expect(JSON.parse(status.body)).toMatchObject({ accessRequired: false, accessOk: false })
+    const apollo = await handler(ev('/api/apollo', 'POST', {}, '{}'))
+    expect(apollo.statusCode).toBe(503) // hosted, but GOOGLE_CLIENT_ID / SESSION_SECRET not set
+    expect((await handler(ev('/api/unknown', 'GET', {}))).statusCode).toBe(404)
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME
   })
 
   it('decodes base64 bodies the way Function URLs send them', async () => {
