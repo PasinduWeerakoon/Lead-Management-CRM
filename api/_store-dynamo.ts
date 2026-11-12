@@ -1,6 +1,8 @@
 import {
   BatchWriteItemCommand,
   DynamoDBClient,
+  DeleteItemCommand,
+  TransactWriteItemsCommand,
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
@@ -9,13 +11,14 @@ import {
   type WriteRequest,
 } from '@aws-sdk/client-dynamodb'
 import { nextStamp, SYNCED_TABLES } from './_db.js'
-import { StoreError, type DataStore, type StoredRecord, type UserRecord } from './_store.js'
+import { StoreError, type Claim, type DataStore, type StoredRecord, type UserRecord } from './_store.js'
 
 /**
  * The shared data in ONE on-demand DynamoDB table (DATA_TABLE), so there is nothing to pay while idle.
  *
  *   profiles:  pk "P"                       sk <profile id>   name, createdAt, updatedAt
  *   users:     pk "U"                       sk <email>        u (JSON of the user record)
+ *   claims:    pk "C#<profile>"             sk <contact id>   by, at (who is collecting it)
  *   records:   pk "R#<profile>#<table>"     sk <record id>    srv (write stamp), d (JSON), del
  *
  * A local secondary index "bySrv" (pk + srv) answers "changed since…" in order without a scan.
@@ -84,8 +87,86 @@ export function dynamoStore(table: string, client: Client = dynamoClient()): Dat
     }
   }
 
+  async function claimsIn(profileId: string): Promise<Claim[]> {
+    const out: Claim[] = []
+    let start: Item | undefined
+    do {
+      const r = await send<{ Items?: Item[]; LastEvaluatedKey?: Item }>(
+        new QueryCommand({
+          TableName: table,
+          KeyConditionExpression: 'pk = :p',
+          ExpressionAttributeValues: { ':p': { S: `C#${profileId}` } },
+          ExclusiveStartKey: start,
+        }),
+      )
+      for (const i of r.Items ?? []) out.push({ id: i.sk.S!, by: i.by?.S ?? '', at: i.at?.S ?? '' })
+      start = r.LastEvaluatedKey
+    } while (start)
+    return out
+  }
+
   return {
     kind: 'dynamo',
+
+    listClaims: claimsIn,
+
+    // Each claim is a conditional write ("only if nobody holds it"), 100 to a transaction. If someone
+    // else claimed one of them in the meantime the transaction is refused; re-read and try the rest.
+    addClaims: async (profileId, ids, by) => {
+      const got: string[] = []
+      let todo = [...new Set(ids)]
+      const at = new Date().toISOString()
+      for (let attempt = 0; todo.length && attempt < 5; attempt++) {
+        if (attempt) {
+          const held = new Set((await claimsIn(profileId)).map((c) => c.id))
+          todo = todo.filter((id) => !held.has(id))
+        }
+        const left: string[] = []
+        for (let i = 0; i < todo.length; i += 100) {
+          const chunk = todo.slice(i, i + 100)
+          try {
+            await send(
+              new TransactWriteItemsCommand({
+                TransactItems: chunk.map((id) => ({
+                  Put: {
+                    TableName: table,
+                    Item: { pk: { S: `C#${profileId}` }, sk: { S: id }, by: { S: by }, at: { S: at } },
+                    ConditionExpression: 'attribute_not_exists(pk)',
+                  },
+                })),
+              }),
+            )
+            got.push(...chunk)
+          } catch (err) {
+            if ((err as { name?: string }).name !== 'TransactionCanceledException') throw err
+            left.push(...chunk)
+          }
+        }
+        todo = left
+      }
+      return got
+    },
+
+    removeClaims: async (profileId, ids, by) => {
+      let n = 0
+      for (const id of ids)
+        try {
+          await send(
+            new DeleteItemCommand({
+              TableName: table,
+              Key: { pk: { S: `C#${profileId}` }, sk: { S: id } },
+              ConditionExpression: by ? 'attribute_exists(pk) AND #b = :b' : 'attribute_exists(pk)',
+              ...(by
+                ? { ExpressionAttributeNames: { '#b': 'by' }, ExpressionAttributeValues: { ':b': { S: by } } }
+                : {}),
+            }),
+          )
+          n++
+        } catch (err) {
+          if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') throw err
+        }
+      return n
+    },
 
     getUser: async (email) => {
       const out = await send<{ Item?: Item }>(
@@ -183,6 +264,9 @@ export function dynamoStore(table: string, client: Client = dynamoClient()): Dat
     },
 
     deleteProfile: async (id) => {
+      const claimKeys: WriteRequest[] = []
+      for await (const k of keys(`C#${id}`)) claimKeys.push({ DeleteRequest: { Key: { pk: k.pk, sk: k.sk } } })
+      await batchWrite(claimKeys)
       for (const t of SYNCED_TABLES) {
         const dels: WriteRequest[] = []
         for await (const k of keys(recordPk(id, t))) dels.push({ DeleteRequest: { Key: { pk: k.pk, sk: k.sk } } })

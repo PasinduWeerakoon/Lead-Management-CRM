@@ -46,8 +46,20 @@ export interface UserRecord {
   lockedUntil?: string
 }
 
+/** Who is collecting web data for one connection, so two people never work on the same one. */
+export interface Claim {
+  id: string
+  by: string
+  at: string
+}
+
 export interface DataStore {
   readonly kind: 'dynamo' | 'mongo' | 'memory'
+  listClaims(profileId: string): Promise<Claim[]>
+  /** Claims each id that nobody holds yet; returns the ids this call actually got. */
+  addClaims(profileId: string, ids: string[], by: string): Promise<string[]>
+  /** Gives ids back (only those held by `by`, unless `by` is undefined). */
+  removeClaims(profileId: string, ids: string[], by?: string): Promise<number>
   getUser(email: string): Promise<UserRecord | undefined>
   /** With `create`, refuses (returns false) when the email is already taken. */
   putUser(user: UserRecord, opts?: { create?: boolean }): Promise<boolean>
@@ -87,6 +99,11 @@ export const storeConfigured = () =>
 export function memoryStore(): DataStore {
   const profiles = new Map<string, Profile>()
   const users = new Map<string, UserRecord>()
+  const claims = new Map<string, Map<string, Claim>>()
+  const claimsOf = (p: string) => {
+    if (!claims.has(p)) claims.set(p, new Map())
+    return claims.get(p)!
+  }
   const records = new Map<string, Map<string, StoredRecord>>()
   const part = (p: string, t: string) => {
     const k = `${p}#${t}`
@@ -95,6 +112,18 @@ export function memoryStore(): DataStore {
   }
   return {
     kind: 'memory',
+    listClaims: async (p) => [...claimsOf(p).values()],
+    addClaims: async (p, ids, by) => {
+      const m = claimsOf(p)
+      const at = new Date().toISOString()
+      return ids.filter((id) => !m.has(id) && !!m.set(id, { id, by, at }))
+    },
+    removeClaims: async (p, ids, by) => {
+      const m = claimsOf(p)
+      let n = 0
+      for (const id of ids) if (m.get(id) && (!by || m.get(id)!.by === by) && m.delete(id)) n++
+      return n
+    },
     getUser: async (email) => users.get(email),
     putUser: async (u, opts) => {
       if (opts?.create && users.has(u.email)) return false
@@ -115,6 +144,7 @@ export function memoryStore(): DataStore {
     },
     deleteProfile: async (id) => {
       profiles.delete(id)
+      claims.delete(id)
       for (const t of SYNCED_TABLES) records.delete(`${id}#${t}`)
     },
     changes: async (p, t, after, limit) => {
@@ -150,8 +180,25 @@ export function mongoStore(db: Db): DataStore {
   const profiles = db.collection<ProfileDoc>('profiles')
   const users = db.collection<UserRecord & { _id: string }>('users')
   const strip = ({ _id, ...u }: UserRecord & { _id: string }): UserRecord => (void _id, u)
+  const claimCol = db.collection<{ _id: string; profileId: string; id: string; by: string; at: string }>('claims')
   return {
     kind: 'mongo',
+    listClaims: async (profileId) =>
+      (await claimCol.find({ profileId }).toArray()).map((c) => ({ id: c.id, by: c.by, at: c.at })),
+    addClaims: async (profileId, ids, by) => {
+      if (!ids.length) return []
+      const at = new Date().toISOString()
+      // _id is unique, so an id someone already holds is refused and the rest still go in.
+      const res = await claimCol
+        .insertMany(
+          ids.map((id) => ({ _id: `${profileId}:${id}`, profileId, id, by, at })),
+          { ordered: false },
+        )
+        .catch((err: { insertedIds?: Record<number, string> }) => ({ insertedIds: err.insertedIds ?? {} }))
+      return Object.values(res.insertedIds).map((k) => String(k).slice(profileId.length + 1))
+    },
+    removeClaims: async (profileId, ids, by) =>
+      (await claimCol.deleteMany({ profileId, id: { $in: ids }, ...(by ? { by } : {}) })).deletedCount,
     getUser: async (email) => {
       const u = await users.findOne({ _id: email })
       return u ? strip(u) : undefined
@@ -189,6 +236,7 @@ export function mongoStore(db: Db): DataStore {
     deleteProfile: async (id) => {
       await Promise.all([
         profiles.deleteOne({ _id: id }),
+        claimCol.deleteMany({ profileId: id }),
         ...SYNCED_TABLES.map((t) => db.collection(t).deleteMany({ profileId: id })),
       ])
     },

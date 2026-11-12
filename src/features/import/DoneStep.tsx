@@ -17,7 +17,7 @@ export function DoneStep({ record, onAnother }: { record: ImportRecord; onAnothe
       title="Your connections are in"
       subTitle={`${parts.join(' · ')}. Next, collect web data so searches have something to work with.`}
       extra={[
-        <Button type="primary" key="collect" onClick={() => navigate('/enrich?start=1')}>
+        <Button type="primary" key="collect" onClick={() => navigate('/enrich')}>
           Next: collect web data
         </Button>,
         <Button

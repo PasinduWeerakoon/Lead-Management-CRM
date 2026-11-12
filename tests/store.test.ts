@@ -45,6 +45,22 @@ function fakeDynamo(PAGE_ITEMS = 3) {
         })
         return {}
       }
+      case 'TransactWriteItemsCommand': {
+        const puts = (input.TransactItems as Array<{ Put: { Item: Item } }>).map((t) => t.Put.Item)
+        if (puts.some((i) => items.has(key(i))))
+          throw Object.assign(new Error('cancelled'), { name: 'TransactionCanceledException' })
+        for (const i of puts) items.set(key(i), i)
+        return {}
+      }
+      case 'DeleteItemCommand': {
+        const k = key(input.Key as Item)
+        const cur = items.get(k)
+        const v = input.ExpressionAttributeValues as Record<string, AttributeValue> | undefined
+        if (!cur || (v?.[':b'] && cur.by?.S !== v[':b'].S))
+          throw Object.assign(new Error('no'), { name: 'ConditionalCheckFailedException' })
+        items.delete(k)
+        return {}
+      }
       case 'GetItemCommand':
         return { Item: items.get(key(input.Key as Item)) }
       case 'PutItemCommand': {
@@ -208,5 +224,22 @@ describe.each(stores)('accounts in the %s store', (_name, make) => {
     expect((await s.getUser('a@example.com'))?.status).toBe('active')
     expect(await s.getUser('nobody@example.com')).toBeUndefined()
     expect((await s.listUsers()).map((x) => x.email)).toEqual(['b@example.com', 'a@example.com'])
+  })
+})
+
+describe.each(stores)('claims in the %s store', (_name, make) => {
+  it('gives each connection to one person only, and gives back only your own', async () => {
+    const s = make()
+    const ids = Array.from({ length: 250 }, (_, i) => `c${i}`)
+    expect(await s.addClaims('p', ids.slice(0, 120), 'a@x.com')).toHaveLength(120)
+    // Overlapping request: only the ones nobody holds.
+    expect(await s.addClaims('p', ids.slice(100, 150), 'b@x.com')).toEqual(ids.slice(120, 150))
+    const claims = await s.listClaims('p')
+    expect(claims).toHaveLength(150)
+    expect(claims.filter((c) => c.by === 'b@x.com')).toHaveLength(30)
+    expect(await s.removeClaims('p', ids.slice(0, 130), 'b@x.com')).toBe(10)
+    expect(await s.removeClaims('p', ['c0', 'c1'])).toBe(2)
+    expect(await s.listClaims('p')).toHaveLength(138)
+    expect(await s.listClaims('other')).toEqual([])
   })
 })

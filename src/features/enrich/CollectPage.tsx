@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Alert, Button, Empty, Flex, Progress } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '../../components/PageHeader'
 import { db } from '../../lib/db'
 import type { Contact } from '../../lib/schemas'
 import { ResearchModal } from './ResearchModal'
 import { PersonWebModal } from './PersonWebModal'
 import { CORESIGNAL_ONLY } from '../../lib/research/coresignal'
+import { ShareWork, useSharing } from './ShareWork'
 
 /** Per-stage counts of what has been collected so far. */
 export function collectStats(contacts: Contact[]) {
@@ -76,14 +77,21 @@ export function CollectPage() {
   const loaded = useLiveQuery(() => db.contacts.toArray())
   const contacts = useMemo(() => loaded ?? [], [loaded])
   const s = useMemo(() => collectStats(contacts), [contacts])
-  const [params, setParams] = useSearchParams()
-  // "Collect everything" runs companies first, then people.
-  const [thenPeople, setThenPeople] = useState(() => params.get('start') === '1')
-  const [running, setRunning] = useState<'companies' | 'people' | undefined>(() =>
-    params.get('start') === '1' ? 'companies' : undefined,
-  )
-  // After an import, or "Collect everything": no extra clicks, each step starts and hands over by itself.
-  const [auto, setAuto] = useState(() => params.get('start') === '1')
+  // Who holds which connections. Collecting only ever runs on your own (or on everything with no shared database).
+  const sharing = useSharing(contacts)
+  const mine = sharing.mine
+  // "Collect everything" runs companies first, then people. Nothing starts until someone clicks.
+  const [thenPeople, setThenPeople] = useState(false)
+  const [running, setRunning] = useState<'companies' | 'people' | undefined>()
+  const [auto, setAuto] = useState(false)
+  // The connections this run works on.
+  const [scope, setScope] = useState<Contact[]>([])
+  const start = (what: 'companies' | 'people' | 'both', list: Contact[]) => {
+    setScope(list)
+    setThenPeople(what === 'both')
+    setAuto(what === 'both')
+    setRunning(what === 'people' ? 'people' : 'companies')
+  }
 
   const overall = pct(s.sitesChecked + s.peopleChecked, s.companies + s.people)
 
@@ -97,22 +105,11 @@ export function CollectPage() {
               description="Searches only use what is collected here. Do this after every import, before searching."
             />
             <Flex gap={8} wrap>
-              <Button onClick={() => setRunning('companies')} disabled={!contacts.length}>
-                Companies only
+              <Button onClick={() => start('companies', mine)} disabled={!mine.length}>
+                My companies only
               </Button>
-              <Button onClick={() => setRunning('people')} disabled={!contacts.length}>
-                People only
-              </Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  setThenPeople(true)
-                  setAuto(true)
-                  setRunning('companies')
-                }}
-                disabled={!contacts.length}
-              >
-                Collect everything
+              <Button onClick={() => start('people', mine)} disabled={!mine.length}>
+                My people only
               </Button>
             </Flex>
           </Flex>
@@ -145,6 +142,8 @@ export function CollectPage() {
                   />
                 )}
               </div>
+
+              <ShareWork sharing={sharing} onStart={(list) => start('both', list)} />
 
               <div className="panel" style={{ padding: 0 }}>
                 <div style={{ padding: '14px 20px' }} className="section-title">
@@ -245,25 +244,26 @@ export function CollectPage() {
 
       {running === 'companies' && loaded && (
         <ResearchModal
-          shown={contacts}
+          shown={scope}
           selected={[]}
           autoStart={auto}
           autoClose={auto && thenPeople}
           onClose={() => {
             setRunning(thenPeople ? 'people' : undefined)
             setThenPeople(false)
-            setParams({}, { replace: true })
+            sharing.refresh()
           }}
         />
       )}
       {running === 'people' && (
         <PersonWebModal
-          shown={contacts}
+          shown={scope}
           selected={[]}
           autoStart={auto}
           onClose={() => {
             setRunning(undefined)
             setAuto(false)
+            sharing.refresh()
           }}
         />
       )}

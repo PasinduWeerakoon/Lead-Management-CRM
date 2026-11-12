@@ -1,6 +1,7 @@
 import type { Db } from 'mongodb'
 import { createHash } from 'node:crypto'
 import { handleAdmin } from './_admin.js'
+import { handleClaims } from './_claims.js'
 import { handleAuth, readSession } from './_auth.js'
 import { handleSources } from './_sources.js'
 import { handleCoresignal } from './_coresignal.js'
@@ -204,6 +205,7 @@ export async function handleData(request: Request, override?: Db | DataStore): P
 export async function routeApi(path: string, request: Request): Promise<Response | undefined> {
   if (path === '/api/auth') return handleAuth(request)
   if (path === '/api/admin') return handleAdmin(request)
+  if (path === '/api/claims') return handleClaims(request)
   if (path === '/api/sources') return handleSources(request)
   if (path === '/api/coresignal') return handleCoresignal(request)
   if (path === '/api/status') return handleStatus(request)

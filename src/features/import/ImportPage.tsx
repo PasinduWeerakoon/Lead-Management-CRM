@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Card, Steps } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../lib/db'
@@ -21,7 +20,6 @@ export interface LoadedFile {
 }
 
 export function ImportPage() {
-  const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [file, setFile] = useState<LoadedFile>()
   const [mapping, setMapping] = useState<ColumnMapping>({})
@@ -83,9 +81,8 @@ export function ImportPage() {
                     // New data: start from the full list, whichever way you go back to People.
                     resetFilters()
                     setRecord(r)
-                    // Searches need web data, so collecting starts right away for the new connections.
-                    if (r.added + r.updated > 0) navigate('/enrich?start=1')
-                    else setStep(3)
+                    // Collecting web data waits for a click (several people may share this import).
+                    setStep(3)
                   }}
                 />
               )}

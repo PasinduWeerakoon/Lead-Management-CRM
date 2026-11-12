@@ -117,6 +117,7 @@ export class LeadsStack extends cdk.Stack {
       api,
       'dynamodb:GetItem',
       'dynamodb:PutItem',
+      'dynamodb:DeleteItem',
       'dynamodb:Query',
       'dynamodb:UpdateItem',
       'dynamodb:BatchWriteItem',
