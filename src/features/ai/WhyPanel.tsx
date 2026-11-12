@@ -78,7 +78,10 @@ export function WhyPanel({ run, people, shortlist }: Props) {
         ...(keyed?.hunter ? ['Hunter.io (work email)'] : []),
       ]
   const companySources = CORESIGNAL_ONLY
-    ? ['Coresignal (licensed company records and job posts)']
+    ? [
+        'Coresignal (licensed company records and job posts)',
+        'Company websites and careers pages (with their linked job boards)',
+      ]
     : [
         'Company website',
         'Job boards (Greenhouse, Lever, Workable, Ashby, Workday)',
@@ -146,7 +149,7 @@ export function WhyPanel({ run, people, shortlist }: Props) {
 
       <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
         {CORESIGNAL_ONLY
-          ? 'All web data comes from Coresignal. People without a LinkedIn URL in the export can’t be looked up.'
+          ? 'People data comes from Coresignal, company data from Coresignal plus each company’s own website. People without a LinkedIn URL in the export can’t be looked up.'
           : 'Public LinkedIn pages are included when the web search returns them. Never used: Indeed and Glassdoor.'}
       </span>
 

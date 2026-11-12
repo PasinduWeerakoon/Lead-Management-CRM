@@ -298,42 +298,15 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
       }
     }
 
-    const researchOne = async (company: ResearchCompany, suggested: string[]) => {
-      const at = new Date().toISOString()
-
-      // Coresignal only: one licensed company record with its jobs. The old sources below stay
-      // as they were and run again when CORESIGNAL_ONLY is false.
-      if (CORESIGNAL_ONLY) {
-        progress(`Looking up ${company.company} in Coresignal…`)
-        const { research, credits } = await fetchCoresignalCompany(company.company, company.domain, opts.signal)
-        if (!research) {
-          await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
-          summary.noSite++
-          progress(`${company.company}: not found in Coresignal (${credits} credits)`)
-          return
-        }
-        await save(company, { status: 'found', ...splitOwnProducts(company.company, research), at })
-        summary.found++
-        progress(
-          `${company.company}: ${[
-            research.industry?.value,
-            research.hiring?.length ? `${research.jobsTotal ?? research.hiring.length} open jobs` : 'no open jobs',
-            research.technologies?.length ? `${research.technologies.length} technologies` : '',
-            `${credits} credits`,
-          ]
-            .filter(Boolean)
-            .join(', ')}`,
-        )
-        return
-      }
-      const candidates = company.domain ? [company.domain] : suggested
+    /** Reads the company's own website, careers pages and the job boards they link to. */
+    const readCompanySite = async (company: ResearchCompany, candidates: string[], trusted: boolean) => {
       let site: SiteResponse | undefined
       let domain: string | undefined
       for (const d of candidates) {
         progress(`Reading ${d}…`)
         const s = await readSiteRemote(d, company.company, opts.signal)
         // A website from your own data is trusted; an AI-suggested one must show the company's name.
-        if (s.ok && (company.domain || s.matchesCompany)) {
+        if (s.ok && (trusted || s.matchesCompany)) {
           site = s
           domain = d
           break
@@ -358,7 +331,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
         found = {
           domain,
           siteUrl: site.url,
-          verified: !!company.domain || site.matchesCompany,
+          verified: trusted || site.matchesCompany,
           ...Object.fromEntries(
             Object.entries(facts).filter(([, v]) => v !== undefined && !(Array.isArray(v) && !v.length)),
           ),
@@ -369,6 +342,56 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
             : {}),
         }
       }
+
+      return { found, domain }
+    }
+
+    const researchOne = async (company: ResearchCompany, suggested: string[]) => {
+      const at = new Date().toISOString()
+
+      // Coresignal first: one licensed company record with its jobs. The old sources below stay
+      // as they were and run again when CORESIGNAL_ONLY is false.
+      if (CORESIGNAL_ONLY) {
+        progress(`Looking up ${company.company} in Coresignal…`)
+        const { research, credits } = await fetchCoresignalCompany(company.company, company.domain, opts.signal)
+        // Then the company's own website and careers pages, for what it says about itself and the
+        // jobs on its own job board. The site's own facts and jobs come first.
+        const site = company.domain ?? research?.domain
+        let found = research
+        if (site) {
+          try {
+            const own = await readCompanySite(company, [site], true)
+            if (own.found) found = research ? mergeResearch(own.found, research) : own.found
+          } catch (err) {
+            // A site that cannot be read keeps the Coresignal record; stopping still stops.
+            if (err instanceof AiError && err.kind === 'cancelled') throw err
+            progress(`${company.company}: website could not be read, keeping the Coresignal record`)
+          }
+        }
+        if (!found) {
+          await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
+          summary.noSite++
+          progress(`${company.company}: not found in Coresignal (${credits} credits)`)
+          return
+        }
+        await save(company, { status: 'found', ...splitOwnProducts(company.company, found), at })
+        summary.found++
+        progress(
+          `${company.company}: ${[
+            found.domain,
+            found.industry?.value,
+            found.hiring?.length ? `${found.hiring.length} open jobs` : 'no open jobs',
+            found.technologies?.length ? `${found.technologies.length} technologies` : '',
+            `${credits} credits`,
+          ]
+            .filter(Boolean)
+            .join(', ')}`,
+        )
+        return
+      }
+      const candidates = company.domain ? [company.domain] : suggested
+      // eslint-disable-next-line prefer-const
+      let { found, domain } = await readCompanySite(company, candidates, !!company.domain)
 
       // Always search the web too: the site alone misses clients, partners, news, leaders and most
       // job ads, and nobody can predict what people will later ask about a company.

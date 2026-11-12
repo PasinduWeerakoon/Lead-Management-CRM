@@ -86,8 +86,10 @@ export function PrivacyPage() {
                   <B>Work information from Coresignal:</B> career history, degrees, certifications and skills for each
                   connection, matched by the LinkedIn profile link in your file, and company records, technologies and
                   open job posts for their employers. A work email is kept only when Coresignal holds one for that
-                  person. Coresignal is a licensed data provider, and every fact shows Coresignal as its source. The
-                  tool itself reads no websites and runs no web or LinkedIn searches.
+                  person. Coresignal is a licensed data provider. The tool also reads each employer's own public website
+                  and careers pages, and the job boards those pages link to (such as Greenhouse or Lever), and skips any
+                  page the site asks bots not to read. Every fact keeps its source. The tool runs no web or LinkedIn
+                  searches.
                 </>
               ) : (
                 <>
@@ -111,8 +113,8 @@ export function PrivacyPage() {
             The tool does not collect home addresses, personal email or phone numbers, family details, health, religion,
             political views or any other special category data.{' '}
             {CORESIGNAL_ONLY
-              ? 'The tool never visits LinkedIn, never logs in to LinkedIn and never uses anyone\'s account. People without a LinkedIn profile link in your file are not looked up.'
-              : 'Public LinkedIn pages are used only when a web search returns them (job posts, company pages, public profiles). The tool never logs in to LinkedIn or uses anyone\'s account. Indeed and Glassdoor are never used.'}
+              ? "The tool never visits LinkedIn, never logs in to LinkedIn and never uses anyone's account. People without a LinkedIn profile link in your file are not looked up."
+              : "Public LinkedIn pages are used only when a web search returns them (job posts, company pages, public profiles). The tool never logs in to LinkedIn or uses anyone's account. Indeed and Glassdoor are never used."}
           </p>
         </Section>
 
