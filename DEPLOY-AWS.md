@@ -76,6 +76,7 @@ Optional shared database: add `MONGODB_URI='mongodb+srv://…'` to the deploy co
 npm run aws:template                       # writes infra/template.json (CloudFormation, placeholders only, no AWS calls)
 AWS_PROFILE=leads npm run aws:up           # builds and creates or updates every service
 AWS_PROFILE=leads npm run aws:status       # stack state, app URL and table name
+AWS_PROFILE=leads npm run aws:report       # writes AWS-SERVICES-REPORT.md: every service, cost, how to delete it
 AWS_PROFILE=leads npm run aws:down         # deletes every service, keeps the data table
 AWS_PROFILE=leads scripts/aws.sh down --delete-data   # also deletes the data table (cannot be undone)
 ```

@@ -5,8 +5,10 @@
 #   scripts/aws.sh template   Writes the CloudFormation template to infra/template.yaml (no AWS calls)
 #   scripts/aws.sh up         Builds the app and creates or updates every service (asks first)
 #   scripts/aws.sh status     Shows the stack's state and its outputs (app URL, table name)
+#   scripts/aws.sh report     Writes AWS-SERVICES-REPORT.md: every service, its cost and how to delete it
 #   scripts/aws.sh down       Deletes every service except the data table (asks first)
 #   scripts/aws.sh down --delete-data   Also deletes the data table, which cannot be undone
+#   Add --yes to up or down to skip the typed confirmation.
 #
 # Needs: AWS CLI credentials (AWS_PROFILE, AWS_REGION), Node.js 22, and `npm --prefix infra install` once.
 # Server keys are read from .env.local and passed to the Lambda; they are never printed.
@@ -33,7 +35,14 @@ load_env() {
   unset MONGODB_URI
 }
 
+# --yes anywhere on the command line skips the typed confirmation (for scripted runs).
+YES=0
+for a in "$@"; do [ "$a" = "--yes" ] && YES=1; done
+APPROVAL=broadening
+[ "$YES" = 1 ] && APPROVAL=never
+
 confirm() {
+  [ "$YES" = 1 ] && { echo "$1 (--yes given)"; return 0; }
   read -r -p "$1 Type '$2' to continue: " answer
   [ "$answer" = "$2" ] || { echo "Stopped. Nothing was changed."; exit 1; }
 }
@@ -76,7 +85,7 @@ case "${1:-}" in
     fi
     # Once per account and region; does nothing if already done.
     (cd infra && npx cdk bootstrap "aws://$CDK_DEFAULT_ACCOUNT/$REGION")
-    (cd infra && npx cdk deploy "$STACK" --require-approval broadening)
+    (cd infra && npx cdk deploy "$STACK" --require-approval "$APPROVAL")
     ;;
   status)
     check_aws status
@@ -101,8 +110,12 @@ case "${1:-}" in
       echo "Kept data table $TABLE. Run '$0 down --delete-data' before the next 'up' only if you want it gone."
     fi
     ;;
+  report)
+    check_aws report
+    node scripts/aws-report.mjs "$STACK" "$REGION"
+    ;;
   *)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

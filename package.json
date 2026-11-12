@@ -18,7 +18,8 @@
     "aws:template": "scripts/aws.sh template",
     "aws:up": "scripts/aws.sh up",
     "aws:status": "scripts/aws.sh status",
-    "aws:down": "scripts/aws.sh down"
+    "aws:down": "scripts/aws.sh down",
+    "aws:report": "scripts/aws.sh report"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",
