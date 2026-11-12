@@ -16,10 +16,8 @@ import { ActivityLog } from './ActivityLog'
 import { WhyPanel } from './WhyPanel'
 import { ResultCard } from './ResultCard'
 
-type Show = 'shortlist' | 'new' | 'partial' | 'unknown' | 'low' | 'all' | `met:${number}`
+type Show = 'shortlist' | 'new' | 'partial' | 'low' | 'all'
 
-/** Met condition i of the search. Checks follow the order of the run's conditions. */
-const metCondition = (p: Person, i: number) => p.checks?.[i]?.status === 'met'
 /** Not shortlisted, but met at least one condition. */
 const partlyMatched = (p: Person) => !onShortlist(p) && !!p.checks?.some((c) => c.status === 'met')
 type Person = ScoreRun['people'][number]
@@ -33,9 +31,6 @@ interface Search {
 }
 
 export const onShortlist = (p: Person) => p.priority === 'High' || p.priority === 'Medium'
-/** Off the shortlist only because data was missing for a condition, not because it failed one. */
-const couldntCheck = (p: Person) =>
-  !onShortlist(p) && !!p.checks?.some((c) => c.status === 'unknown') && !p.checks.some((c) => c.status === 'not_met')
 const PAGE = 20
 
 /** Runs grouped by the prompt they used, so each prompt keeps its own history. */
@@ -99,13 +94,9 @@ export function ResultsPage() {
             ? fresh.has(p.id)
             : show === 'partial'
               ? partlyMatched(p)
-              : show.startsWith('met:')
-                ? metCondition(p, Number(show.slice(4)))
-                : show === 'unknown'
-                  ? couldntCheck(p)
-                  : show === 'low'
-                    ? !onShortlist(p) && !couldntCheck(p)
-                    : true,
+              : show === 'low'
+                ? !onShortlist(p)
+                : true,
       )
       .filter((p) => !needle || `${p.name} ${p.position ?? ''} ${p.company ?? ''}`.toLowerCase().includes(needle))
       .sort((a, b) => b.score - a.score)
@@ -285,10 +276,9 @@ export function ResultsPage() {
                       { value: 'shortlist', label: `Shortlisted ${shortlist}` },
                       { value: 'new', label: `New ${fresh.size}` },
                       { value: 'partial', label: `Partly matched ${run.people.filter(partlyMatched).length}` },
-                      { value: 'unknown', label: `Couldn’t check ${run.people.filter(couldntCheck).length}` },
                       {
                         value: 'low',
-                        label: `Not a match ${run.people.filter((p) => !onShortlist(p) && !couldntCheck(p)).length}`,
+                        label: `Not a match ${run.people.filter((p) => !onShortlist(p)).length}`,
                       },
                       { value: 'all', label: `All ${run.people.length}` },
                     ]}
@@ -302,27 +292,6 @@ export function ResultsPage() {
                     style={{ maxWidth: 280 }}
                   />
                 </Flex>
-                {(run.criteria?.length ?? 0) > 1 && (
-                  <Flex gap={8} wrap align="center">
-                    <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Met condition</span>
-                    <Segmented<Show>
-                      value={show}
-                      onChange={(v) => {
-                        setShow(v)
-                        setLimit(PAGE)
-                      }}
-                      options={run.criteria!.map((c, i) => ({
-                        value: `met:${i}` as Show,
-                        label: (
-                          <span title={c}>
-                            {i + 1}. {c.length > 40 ? `${c.slice(0, 40)}…` : c}{' '}
-                            {run.people.filter((p) => metCondition(p, i)).length}
-                          </span>
-                        ),
-                      }))}
-                    />
-                  </Flex>
-                )}
 
                 {rows.length === 0 ? (
                   <div className="panel" style={{ padding: 24, color: 'var(--text-3)' }}>
