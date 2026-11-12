@@ -329,7 +329,7 @@ export async function hunterEmail(first: string, last: string, domain: string, f
  * GET /api/sources?op=email&first=…&last=…&domain=…    → { email } or {}
  */
 export async function handleSources(request: Request, f: Fetch = fetch): Promise<Response> {
-  const denied = requireUser(request)
+  const denied = await requireUser(request)
   if (denied) return denied
   const u = new URL(request.url)
   const op = u.searchParams.get('op')

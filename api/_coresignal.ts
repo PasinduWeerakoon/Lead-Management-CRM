@@ -323,7 +323,7 @@ async function company(cs: Coresignal, opts: { linkedin?: string; name: string; 
  * GET /api/coresignal?op=company&name=…&domain=…&linkedin=…     → { research, credits }
  */
 export async function handleCoresignal(request: Request, f: Fetch = fetch): Promise<Response> {
-  const denied = requireUser(request)
+  const denied = await requireUser(request)
   if (denied) return denied
   const u = new URL(request.url)
   const op = u.searchParams.get('op')

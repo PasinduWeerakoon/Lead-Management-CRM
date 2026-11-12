@@ -36,7 +36,7 @@ const json = (status: number, body: unknown) =>
 
 export async function handleApollo(request: Request, fetchImpl: typeof fetch = fetch): Promise<Response> {
   if (request.method !== 'POST') return json(405, { error: 'Use POST.' })
-  const denied = requireUser(request)
+  const denied = await requireUser(request)
   if (denied) return denied
   const key = request.headers.get('x-apollo-key')?.trim()
   if (!key || key.length < 10 || key.length > 200 || /\s/.test(key)) {

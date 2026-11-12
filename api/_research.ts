@@ -470,7 +470,7 @@ export function siteMatchesCompany(company: string, site: Pick<SiteResult, 'titl
 
 /** POST /api/research { domain, company } → the site's pages and jobs, and whether it's really this company. */
 export async function handleResearch(request: Request, fetchImpl: typeof fetch = fetch): Promise<Response> {
-  const denied = checkAccess(request)
+  const denied = await checkAccess(request)
   if (denied) return denied
   if (request.method !== 'POST') return json(405, { error: 'Use POST.' })
   let body: { domain?: unknown; company?: unknown }

@@ -9,7 +9,7 @@ import { routeApi } from './api/_routes'
 const securityHeaders = Object.fromEntries(vercel.headers[0].headers.map((h) => [h.key, h.value]))
 
 /** Server-only settings the /api functions read; never exposed to browser code (no VITE_ prefix). */
-const SERVER_ENV = ['MONGODB_URI', 'MONGODB_DB', 'GOOGLE_CLIENT_ID', 'SESSION_SECRET', 'ALLOWED_DOMAIN', 'ALLOWED_EMAILS', 'OPENAI_API_KEY', 'AI_DAILY_CAP_USD', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'HUNTER_API_KEY', 'CORESIGNAL_API_KEY', 'DATA_TABLE', 'DATA_STORE', 'DYNAMODB_ENDPOINT', 'AWS_REGION'] as const
+const SERVER_ENV = ['MONGODB_URI', 'MONGODB_DB', 'GOOGLE_CLIENT_ID', 'SESSION_SECRET', 'ALLOWED_DOMAIN', 'ALLOWED_EMAILS', 'OPENAI_API_KEY', 'AI_DAILY_CAP_USD', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'HUNTER_API_KEY', 'CORESIGNAL_API_KEY', 'SUPER_ADMIN_EMAIL', 'DATA_TABLE', 'DATA_STORE', 'DYNAMODB_ENDPOINT', 'AWS_REGION'] as const
 
 /** Runs the same /api functions as Vercel (Apollo forwarding, profiles, shared data) in the dev server. */
 function apiRoutes(): Plugin {
@@ -40,7 +40,8 @@ function apiRoutes(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  for (const k of SERVER_ENV) if (env[k] && !process.env[k]) process.env[k] = env[k]
+  // Tests set their own settings; never let .env.local (real keys, a session secret) leak into them.
+  if (!process.env.VITEST) for (const k of SERVER_ENV) if (env[k] && !process.env[k]) process.env[k] = env[k]
   return {
     plugins: [react(), apiRoutes()],
     preview: { headers: securityHeaders },

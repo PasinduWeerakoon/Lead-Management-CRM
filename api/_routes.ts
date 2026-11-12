@@ -1,6 +1,7 @@
 import type { Db } from 'mongodb'
 import { createHash } from 'node:crypto'
-import { handleAuth } from './_auth.js'
+import { handleAdmin } from './_admin.js'
+import { handleAuth, readSession } from './_auth.js'
 import { handleSources } from './_sources.js'
 import { handleCoresignal } from './_coresignal.js'
 import { handleResearch } from './_research.js'
@@ -20,6 +21,24 @@ const MAX_RECORDS = 500
 const PAGE = 1000
 /** Pulls re-read a few seconds back, so writes landing on another server instance at the same moment aren't missed. */
 const OVERLAP_MS = 10_000
+
+/** DynamoDB keeps at most 400 KB per item. A very large search drops its step log, then shortens reasons, then keeps the top people. */
+const RUN_BYTES = 360_000
+export function fitRun(run: Record<string, unknown>): Record<string, unknown> {
+  const size = (r: unknown) => Buffer.byteLength(JSON.stringify(r))
+  if (size(run) <= RUN_BYTES) return run
+  let r: Record<string, unknown> = { ...run, log: undefined, trimmed: true }
+  type P = { score?: number; reason?: string; checks?: Array<{ evidence?: string }> }
+  const people = (Array.isArray(r.people) ? (r.people as P[]) : []).map((p) => ({
+    ...p,
+    reason: p.reason?.slice(0, 240),
+    checks: p.checks?.map((c) => ({ ...c, evidence: c.evidence?.slice(0, 160) })),
+  }))
+  r = { ...r, people }
+  for (let keep = people.length; size(r) > RUN_BYTES && keep > 50; keep = Math.floor(keep * 0.8))
+    r = { ...r, people: [...people].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, Math.floor(keep * 0.8)) }
+  return r
+}
 
 const isTable = (t: unknown): t is SyncedTable =>
   typeof t === 'string' && (SYNCED_TABLES as readonly string[]).includes(t)
@@ -46,7 +65,7 @@ const accessKeyId = () => {
 
 /** GET /api/status — whether the shared database is set up. Reveals no data. */
 export async function handleStatus(request: Request): Promise<Response> {
-  const denied = checkAccess(request)
+  const denied = await checkAccess(request)
   let companyAi: Awaited<ReturnType<typeof companyAiStatus>> | undefined
   // Only told to people with the access code; never includes the key.
   if (!denied && companyAiConfigured()) companyAi = await companyAiStatus().catch(() => undefined)
@@ -88,7 +107,7 @@ async function withStore(fn: (store: DataStore) => Promise<Response>, override?:
 
 /** /api/profiles — list (GET), create (POST), rename (PATCH), delete with all its data (DELETE). */
 export async function handleProfiles(request: Request, override?: Db | DataStore): Promise<Response> {
-  const denied = checkAccess(request)
+  const denied = await checkAccess(request)
   if (denied) return denied
   return withStore(async (store) => {
     if (request.method === 'GET') return json(200, { profiles: await store.listProfiles() })
@@ -127,7 +146,7 @@ export async function handleProfiles(request: Request, override?: Db | DataStore
  * cursor, so a big import saved within those seconds can't make the same page come back forever.
  */
 export async function handleData(request: Request, override?: Db | DataStore): Promise<Response> {
-  const denied = checkAccess(request)
+  const denied = await checkAccess(request)
   if (denied) return denied
   return withStore(async (store) => {
     if (request.method === 'GET') {
@@ -156,6 +175,7 @@ export async function handleData(request: Request, override?: Db | DataStore): P
     if (upserts.length + deletes.length > MAX_RECORDS)
       return json(413, { error: `At most ${MAX_RECORDS} records per request.` })
 
+    const by = table === 'scoreRuns' ? (await readSession(request))?.email : undefined
     const writes: RecordWrite[] = []
     for (const u of upserts as Array<{ id?: unknown; data?: unknown }>) {
       if (
@@ -168,7 +188,8 @@ export async function handleData(request: Request, override?: Db | DataStore): P
         return json(400, { error: 'Each record needs an id and data.' })
       const { _ts: _drop, ...data } = u.data as Record<string, unknown>
       void _drop
-      writes.push({ id: u.id, data })
+      // Searches carry who ran them (for the super admin) and are trimmed to fit one database item.
+      writes.push({ id: u.id, data: table === 'scoreRuns' ? fitRun({ ...data, by: data.by ?? by }) : data })
     }
     for (const id of deletes) {
       if (typeof id !== 'string' || id.length > 200) return json(400, { error: 'Invalid id to delete.' })
@@ -182,6 +203,7 @@ export async function handleData(request: Request, override?: Db | DataStore): P
 /** One entry point for the dev server: picks the handler by path. */
 export async function routeApi(path: string, request: Request): Promise<Response | undefined> {
   if (path === '/api/auth') return handleAuth(request)
+  if (path === '/api/admin') return handleAdmin(request)
   if (path === '/api/sources') return handleSources(request)
   if (path === '/api/coresignal') return handleCoresignal(request)
   if (path === '/api/status') return handleStatus(request)

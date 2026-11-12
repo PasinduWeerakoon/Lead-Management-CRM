@@ -30,8 +30,28 @@ export interface RecordWrite {
   deleted?: boolean
 }
 
+/** A person who can sign in. Kept with the shared data; the password only as a scrypt hash. */
+export interface UserRecord {
+  email: string
+  username: string
+  passwordHash: string
+  role: 'super_admin' | 'user'
+  status: 'pending' | 'active' | 'disabled'
+  createdAt: string
+  updatedAt: string
+  approvedBy?: string
+  lastSignInAt?: string
+  /** Failed sign-ins in a row, and until when sign-in is paused after too many. */
+  failedSignIns?: number
+  lockedUntil?: string
+}
+
 export interface DataStore {
   readonly kind: 'dynamo' | 'mongo' | 'memory'
+  getUser(email: string): Promise<UserRecord | undefined>
+  /** With `create`, refuses (returns false) when the email is already taken. */
+  putUser(user: UserRecord, opts?: { create?: boolean }): Promise<boolean>
+  listUsers(): Promise<UserRecord[]>
   listProfiles(): Promise<Profile[]>
   /** Creates the profile, or renames it if it exists (createdAt is kept). */
   saveProfile(id: string, name: string, createdAt: string): Promise<void>
@@ -66,6 +86,7 @@ export const storeConfigured = () =>
 
 export function memoryStore(): DataStore {
   const profiles = new Map<string, Profile>()
+  const users = new Map<string, UserRecord>()
   const records = new Map<string, Map<string, StoredRecord>>()
   const part = (p: string, t: string) => {
     const k = `${p}#${t}`
@@ -74,6 +95,13 @@ export function memoryStore(): DataStore {
   }
   return {
     kind: 'memory',
+    getUser: async (email) => users.get(email),
+    putUser: async (u, opts) => {
+      if (opts?.create && users.has(u.email)) return false
+      users.set(u.email, { ...u })
+      return true
+    },
+    listUsers: async () => [...users.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     listProfiles: async () => [...profiles.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     saveProfile: async (id, name, createdAt) => {
       const now = new Date().toISOString()
@@ -120,8 +148,28 @@ interface RecordDoc {
 
 export function mongoStore(db: Db): DataStore {
   const profiles = db.collection<ProfileDoc>('profiles')
+  const users = db.collection<UserRecord & { _id: string }>('users')
+  const strip = ({ _id, ...u }: UserRecord & { _id: string }): UserRecord => (void _id, u)
   return {
     kind: 'mongo',
+    getUser: async (email) => {
+      const u = await users.findOne({ _id: email })
+      return u ? strip(u) : undefined
+    },
+    putUser: async (u, opts) => {
+      if (opts?.create) {
+        try {
+          await users.insertOne({ _id: u.email, ...u })
+          return true
+        } catch (err) {
+          if ((err as { code?: number }).code === 11000) return false
+          throw err
+        }
+      }
+      await users.replaceOne({ _id: u.email }, { ...u }, { upsert: true })
+      return true
+    },
+    listUsers: async () => (await users.find({}).sort({ createdAt: 1 }).limit(1000).toArray()).map(strip),
     listProfiles: async () =>
       (await profiles.find({}).sort({ createdAt: 1 }).limit(500).toArray()).map((p) => ({
         id: p._id,

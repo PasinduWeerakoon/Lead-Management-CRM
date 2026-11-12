@@ -45,6 +45,15 @@ function fakeDynamo(PAGE_ITEMS = 3) {
         })
         return {}
       }
+      case 'GetItemCommand':
+        return { Item: items.get(key(input.Key as Item)) }
+      case 'PutItemCommand': {
+        const item = input.Item as Item
+        if (input.ConditionExpression && items.has(key(item)))
+          throw Object.assign(new Error('exists'), { name: 'ConditionalCheckFailedException' })
+        items.set(key(item), item)
+        return {}
+      }
       case 'BatchWriteItemCommand': {
         const reqs = Object.values(
           input.RequestItems as Record<string, Array<Record<string, { Item?: Item; Key?: Item }>>>,
@@ -177,5 +186,27 @@ describe('the DynamoDB store', () => {
     )
     expect(res.status).toBe(413)
     expect(((await res.json()) as { error: string }).error).toMatch(/too big/)
+  })
+})
+
+describe.each(stores)('accounts in the %s store', (_name, make) => {
+  it('creates once, reads back, updates and lists', async () => {
+    const s = make()
+    const u = {
+      email: 'a@example.com',
+      username: 'A',
+      passwordHash: 'scrypt$1$x$y',
+      role: 'user' as const,
+      status: 'pending' as const,
+      createdAt: '2026-01-02',
+      updatedAt: '2026-01-02',
+    }
+    expect(await s.putUser(u, { create: true })).toBe(true)
+    expect(await s.putUser({ ...u, username: 'Other' }, { create: true })).toBe(false)
+    await s.putUser({ ...u, email: 'b@example.com', createdAt: '2026-01-01' }, { create: true })
+    await s.putUser({ ...u, status: 'active' })
+    expect((await s.getUser('a@example.com'))?.status).toBe('active')
+    expect(await s.getUser('nobody@example.com')).toBeUndefined()
+    expect((await s.listUsers()).map((x) => x.email)).toEqual(['b@example.com', 'a@example.com'])
   })
 })

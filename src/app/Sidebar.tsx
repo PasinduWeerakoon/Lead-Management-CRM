@@ -108,6 +108,7 @@ export function Sidebar() {
     go(to)
     if (small) setOpen(false)
   }
+  const isAdmin = useAuth((s) => s.user?.role === 'super_admin')
   const contacts = useLiveQuery(() => db.contacts.toArray(), [], [] as Contact[])
   const runs = useLiveQuery(() => db.scoreRuns.toArray(), [], [] as ScoreRun[])
   const pct = useMemo(() => coverage(contacts).percent, [contacts])
@@ -201,6 +202,9 @@ export function Sidebar() {
             active={['/settings', '/ai', '/briefs', '/keyword-packs', '/presets', '/accuracy'].includes(pathname)}
             onGo={navigate}
           />
+          {isAdmin && (
+            <NavLink item={{ to: '/admin', label: 'Admin' }} active={pathname === '/admin'} onGo={navigate} />
+          )}
           <NavLink
             item={{ to: '/privacy', label: 'Privacy and PDPA' }}
             active={pathname === '/privacy'}

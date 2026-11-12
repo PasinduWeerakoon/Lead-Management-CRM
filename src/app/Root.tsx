@@ -26,6 +26,7 @@ import { NewSearchPage } from '../features/ai/NewSearchPage'
 import { useAuth } from '../features/auth/store'
 import { HomePage } from '../features/home/HomePage'
 import { SignInPage } from '../features/auth/SignInPage'
+import { AdminPage } from '../features/admin/AdminPage'
 import { PrivacyPage } from '../features/auth/PrivacyPage'
 
 function useSystemDark() {
@@ -81,6 +82,7 @@ export function Root() {
 
 /** The app itself. Only mounted once someone is signed in, so no local data loads or syncs before that. */
 function Workspace() {
+  const isAdmin = useAuth((s) => s.user?.role === 'super_admin')
   const initAi = useAi((s) => s.init)
   const initApollo = useApolloKey((s) => s.init)
   useEffect(() => {
@@ -116,6 +118,7 @@ function Workspace() {
             <Route path="/presets" element={<PresetsPage />} />
             <Route path="/briefs" element={<BriefsPage />} />
             <Route path="/accuracy" element={<AccuracyPage />} />
+            <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/home" replace />} />
             <Route path="*" element={<Navigate to="/home" replace />} />
           </Routes>
         </Layout.Content>

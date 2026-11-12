@@ -113,7 +113,7 @@ describe('/api/profiles and /api/data on MongoDB', () => {
     expect((await handleData(req('GET', '/api/data?profileId=a&table=settings&since=0'), mdb)).status).toBe(400)
   })
 
-  it('refuses data when hosted without Google sign-in set up', async () => {
+  it('refuses data when hosted without sign-in set up', async () => {
     process.env.VERCEL = '1'
     try {
       expect((await handleProfiles(req('GET', '/api/profiles'), mdb)).status).toBe(503)

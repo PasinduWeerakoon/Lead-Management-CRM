@@ -28,7 +28,7 @@ describe('AWS Lambda entry', () => {
     const status = await handler(ev('/api/status', 'GET', {}))
     expect(JSON.parse(status.body)).toMatchObject({ accessRequired: false, accessOk: false })
     const apollo = await handler(ev('/api/apollo', 'POST', {}, '{}'))
-    expect(apollo.statusCode).toBe(503) // hosted, but GOOGLE_CLIENT_ID / SESSION_SECRET not set
+    expect(apollo.statusCode).toBe(503) // hosted, but SESSION_SECRET / a database not set
     expect((await handler(ev('/api/unknown', 'GET', {}))).statusCode).toBe(404)
     delete process.env.AWS_LAMBDA_FUNCTION_NAME
   })

@@ -74,7 +74,8 @@ export function PrivacyPage() {
         <Section title="What data the tool uses">
           <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <li>
-              <B>Your account:</B> your name, work email and Google profile picture, taken from Google when you sign in.
+              <B>Your account:</B> the email and username you sign up with, and your password, kept only as a one-way
+              hash that nobody can read back.
             </li>
             <li>
               <B>Your LinkedIn connections:</B> names, job titles, companies, profile links and connection dates from
@@ -102,7 +103,8 @@ export function PrivacyPage() {
               )}
             </li>
             <li>
-              <B>Your notes:</B> status, tags and notes you add, and the searches you run.
+              <B>Your notes and searches:</B> status, tags and notes you add, and each search you run (prompt,
+              conditions and scored people), saved with your email.
             </li>
             <li>
               <B>Activity records:</B> sign in times and main actions, kept to protect the data and to answer PDPA
@@ -174,8 +176,9 @@ export function PrivacyPage() {
 
         <Section title="How it is protected">
           <p style={{ margin: 0 }}>
-            Only approved 1BT Google accounts can sign in. Connections are encrypted between your browser and the
-            server. Every fact keeps its source so wrong data can be found and removed.
+            Only accounts approved by the super admin can sign in. The super admin can see every account and every
+            search. Connections are encrypted between your browser and the server. Every fact keeps its source so wrong
+            data can be found and removed.
           </p>
         </Section>
 

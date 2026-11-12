@@ -48,7 +48,7 @@ export async function companyAiStatus() {
 }
 
 export async function handleAi(request: Request, fetchImpl: typeof fetch = fetch): Promise<Response> {
-  const denied = checkAccess(request)
+  const denied = await checkAccess(request)
   if (denied) return denied
   const key = process.env.OPENAI_API_KEY?.trim()
   if (!key) return json(503, { error: 'The company AI key isn’t set up on the server.', code: 'no_company_key' })

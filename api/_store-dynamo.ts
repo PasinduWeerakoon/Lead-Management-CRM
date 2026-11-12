@@ -1,18 +1,21 @@
 import {
   BatchWriteItemCommand,
   DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
   QueryCommand,
   UpdateItemCommand,
   type AttributeValue,
   type WriteRequest,
 } from '@aws-sdk/client-dynamodb'
 import { nextStamp, SYNCED_TABLES } from './_db.js'
-import { StoreError, type DataStore, type StoredRecord } from './_store.js'
+import { StoreError, type DataStore, type StoredRecord, type UserRecord } from './_store.js'
 
 /**
  * The shared data in ONE on-demand DynamoDB table (DATA_TABLE), so there is nothing to pay while idle.
  *
  *   profiles:  pk "P"                       sk <profile id>   name, createdAt, updatedAt
+ *   users:     pk "U"                       sk <email>        u (JSON of the user record)
  *   records:   pk "R#<profile>#<table>"     sk <record id>    srv (write stamp), d (JSON), del
  *
  * A local secondary index "bySrv" (pk + srv) answers "changed since…" in order without a scan.
@@ -83,6 +86,47 @@ export function dynamoStore(table: string, client: Client = dynamoClient()): Dat
 
   return {
     kind: 'dynamo',
+
+    getUser: async (email) => {
+      const out = await send<{ Item?: Item }>(
+        new GetItemCommand({ TableName: table, Key: { pk: { S: 'U' }, sk: { S: email } }, ConsistentRead: true }),
+      )
+      return out.Item?.u?.S ? (JSON.parse(out.Item.u.S) as UserRecord) : undefined
+    },
+
+    putUser: async (u, opts) => {
+      try {
+        await send(
+          new PutItemCommand({
+            TableName: table,
+            Item: { pk: { S: 'U' }, sk: { S: u.email }, u: { S: JSON.stringify(u) } },
+            ...(opts?.create ? { ConditionExpression: 'attribute_not_exists(pk)' } : {}),
+          }),
+        )
+        return true
+      } catch (err) {
+        if ((err as { name?: string }).name === 'ConditionalCheckFailedException') return false
+        throw err
+      }
+    },
+
+    listUsers: async () => {
+      const users: UserRecord[] = []
+      let start: Item | undefined
+      do {
+        const out = await send<{ Items?: Item[]; LastEvaluatedKey?: Item }>(
+          new QueryCommand({
+            TableName: table,
+            KeyConditionExpression: 'pk = :p',
+            ExpressionAttributeValues: { ':p': { S: 'U' } },
+            ExclusiveStartKey: start,
+          }),
+        )
+        for (const i of out.Items ?? []) if (i.u?.S) users.push(JSON.parse(i.u.S) as UserRecord)
+        start = out.LastEvaluatedKey
+      } while (start)
+      return users.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    },
 
     listProfiles: async () => {
       const out = await send<{ Items?: Item[] }>(

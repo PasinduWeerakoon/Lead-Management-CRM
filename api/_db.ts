@@ -6,7 +6,7 @@ import { requireUser } from './_auth.js'
  * keep warm instances), the Google sign-in check, and JSON responses.
  */
 
-export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets'] as const
+export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets', 'scoreRuns'] as const
 export type SyncedTable = (typeof SYNCED_TABLES)[number]
 
 export const PROFILE_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -49,7 +49,7 @@ export const isHosted = () =>
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production'
 
 /** Every data route calls this: a 401 unless someone is signed in with Google (see _auth.ts). */
-export function checkAccess(request: Request): Response | undefined {
+export function checkAccess(request: Request): Promise<Response | undefined> {
   return requireUser(request)
 }
 

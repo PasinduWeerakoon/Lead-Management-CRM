@@ -1,33 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Alert } from 'antd'
+import { useState } from 'react'
+import { Alert, Button, Form, Input, Segmented } from 'antd'
 import { Link } from 'react-router-dom'
 import { IconInfoCircle, IconShieldLock } from '@tabler/icons-react'
 import { useAuth } from './store'
-
-interface GoogleId {
-  initialize: (o: { client_id: string; callback: (r: { credential: string }) => void; ux_mode?: string }) => void
-  renderButton: (el: HTMLElement, o: Record<string, unknown>) => void
-}
-declare global {
-  interface Window {
-    google?: { accounts: { id: GoogleId } }
-  }
-}
-
-const GIS_SRC = 'https://accounts.google.com/gsi/client'
-
-/** Loads Google's sign-in script once. */
-function loadGis(): Promise<GoogleId> {
-  if (window.google?.accounts?.id) return Promise.resolve(window.google.accounts.id)
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = GIS_SRC
-    s.async = true
-    s.onload = () => (window.google?.accounts?.id ? resolve(window.google.accounts.id) : reject(new Error('gis')))
-    s.onerror = () => reject(new Error('gis'))
-    document.head.appendChild(s)
-  })
-}
 
 function Note({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -38,26 +13,25 @@ function Note({ icon, children }: { icon: React.ReactNode; children: React.React
   )
 }
 
-/** The only screen people see before signing in: a Google button and the privacy notes. */
+/** The only screen people see before signing in: sign in or create an account, and the privacy notes. */
 export function SignInPage() {
-  const { clientId, message, signInWithGoogle } = useAuth()
-  const btnRef = useRef<HTMLDivElement>(null)
-  const [loadError, setLoadError] = useState(false)
+  const { message, notice, signIn, signUp } = useAuth()
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [busy, setBusy] = useState(false)
+  const [form] = Form.useForm<{ email: string; username?: string; password: string; confirm?: string }>()
 
-  useEffect(() => {
-    if (!clientId) return
-    let cancelled = false
-    loadGis()
-      .then((gis) => {
-        if (cancelled || !btnRef.current) return
-        gis.initialize({ client_id: clientId, callback: (r) => void signInWithGoogle(r.credential) })
-        gis.renderButton(btnRef.current, { theme: 'outline', size: 'large', text: 'continue_with', width: 328 })
-      })
-      .catch(() => setLoadError(true))
-    return () => {
-      cancelled = true
+  const submit = async (v: { email: string; username?: string; password: string }) => {
+    setBusy(true)
+    try {
+      if (mode === 'signin') await signIn(v.email, v.password)
+      else if (await signUp(v.email, v.username ?? '', v.password)) {
+        form.resetFields(['password', 'confirm'])
+        setMode('signin')
+      }
+    } finally {
+      setBusy(false)
     }
-  }, [clientId, signInWithGoogle])
+  }
 
   return (
     <div
@@ -91,16 +65,76 @@ export function SignInPage() {
         >
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--text)' }}>
-              Sign in to your workspace
+              {mode === 'signin' ? 'Sign in to your workspace' : 'Create your account'}
             </h1>
             <p style={{ margin: 0, color: 'var(--text-3)' }}>1 Billion Technology</p>
           </div>
 
+          <Segmented
+            block
+            value={mode}
+            onChange={(v) => setMode(v as 'signin' | 'signup')}
+            options={[
+              { value: 'signin', label: 'Sign in' },
+              { value: 'signup', label: 'Create account' },
+            ]}
+          />
+          {notice && <Alert type="success" showIcon title={notice} />}
           {message && <Alert type="error" showIcon title={message} />}
-          {loadError && (
-            <Alert type="error" showIcon title="Couldn’t load Google sign-in. Check your connection and reload." />
+          <Form form={form} layout="vertical" requiredMark={false} onFinish={(v) => void submit(v)}>
+            <Form.Item
+              name="email"
+              label="Email"
+              rules={[{ required: true, type: 'email', message: 'Enter your email.' }]}
+            >
+              <Input autoComplete="email" inputMode="email" autoFocus />
+            </Form.Item>
+            {mode === 'signup' && (
+              <Form.Item
+                name="username"
+                label="Username"
+                rules={[{ required: true, min: 3, max: 40, message: 'Use 3 to 40 characters.' }]}
+              >
+                <Input autoComplete="nickname" />
+              </Form.Item>
+            )}
+            <Form.Item
+              name="password"
+              label="Password"
+              rules={[
+                { required: true, message: 'Enter your password.' },
+                ...(mode === 'signup' ? [{ min: 10, message: 'Use at least 10 characters.' }] : []),
+              ]}
+            >
+              <Input.Password autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} />
+            </Form.Item>
+            {mode === 'signup' && (
+              <Form.Item
+                name="confirm"
+                label="Repeat password"
+                dependencies={['password']}
+                rules={[
+                  { required: true, message: 'Repeat the password.' },
+                  ({ getFieldValue }) => ({
+                    validator: (_, v) =>
+                      !v || v === getFieldValue('password')
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('The passwords don’t match.')),
+                  }),
+                ]}
+              >
+                <Input.Password autoComplete="new-password" />
+              </Form.Item>
+            )}
+            <Button type="primary" htmlType="submit" block loading={busy}>
+              {mode === 'signin' ? 'Sign in' : 'Create account'}
+            </Button>
+          </Form>
+          {mode === 'signup' && (
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>
+              New accounts can sign in after the super admin approves them.
+            </p>
           )}
-          <div ref={btnRef} style={{ display: 'flex', justifyContent: 'center', minHeight: 44 }} />
 
           <div
             style={{
@@ -114,8 +148,7 @@ export function SignInPage() {
             }}
           >
             <Note icon={<IconShieldLock size={16} stroke={1.8} />}>
-              Use your @1billiontech.com Google account. By signing in you agree to the{' '}
-              <Link to="/privacy">privacy policy</Link>.
+              By signing in you agree to the <Link to="/privacy">privacy policy</Link>.
             </Note>
             <Note icon={<IconInfoCircle size={16} stroke={1.8} />}>
               Your sign-ins and actions are logged to protect personal data under the PDPA.

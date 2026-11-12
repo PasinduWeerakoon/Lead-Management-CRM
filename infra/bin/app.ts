@@ -8,7 +8,7 @@ import { LeadsStack } from '../lib/leads-stack'
  * Optional: MONGODB_URI='mongodb+srv://…' to switch on the shared database.
  * Optional: OPENAI_API_KEY='sk-…' for a company GPT key kept on the server (AI_DAILY_CAP_USD, default 10).
  * Shared data goes to the stack's DynamoDB table; these are passed to the server when set:
- *   GOOGLE_CLIENT_ID, SESSION_SECRET, ALLOWED_DOMAIN, ALLOWED_EMAILS, CORESIGNAL_API_KEY, HUNTER_API_KEY,
+ *   SESSION_SECRET, SUPER_ADMIN_EMAIL, CORESIGNAL_API_KEY, HUNTER_API_KEY,
  *   ADZUNA_APP_ID, ADZUNA_APP_KEY
  * Region and account come from your AWS CLI profile (AWS_PROFILE / AWS_REGION).
  */
@@ -17,10 +17,8 @@ const accessKey = process.env.APP_ACCESS_KEY?.trim() || undefined
 if (accessKey && accessKey.length < 12) throw new Error('APP_ACCESS_KEY must be at least 12 characters.')
 
 const PASSED = [
-  'GOOGLE_CLIENT_ID',
   'SESSION_SECRET',
-  'ALLOWED_DOMAIN',
-  'ALLOWED_EMAILS',
+  'SUPER_ADMIN_EMAIL',
   'CORESIGNAL_API_KEY',
   'HUNTER_API_KEY',
   'ADZUNA_APP_ID',

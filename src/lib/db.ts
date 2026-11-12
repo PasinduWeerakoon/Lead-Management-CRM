@@ -38,7 +38,7 @@ export function setActiveProfileId(id: string) {
 export const profileDbName = (id: string) => (id === DEFAULT_PROFILE_ID ? 'leads-management' : `leads-profile-${id}`)
 
 /** Tables copied to the shared database. Settings and keys never are. */
-export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets'] as const
+export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets', 'scoreRuns'] as const
 export type SyncedTable = (typeof SYNCED_TABLES)[number]
 
 export const db = new Dexie(profileDbName(activeProfileId())) as Dexie & {
@@ -51,7 +51,7 @@ export const db = new Dexie(profileDbName(activeProfileId())) as Dexie & {
   aiUsage: EntityTable<AiUsageRecord, 'id'>
   briefs: EntityTable<Brief, 'id'>
   presets: EntityTable<SavedPreset, 'id'>
-  /** Past scoring runs (this browser only). */
+  /** Past scoring runs, synced so the super admin can see every search. */
   scoreRuns: EntityTable<ScoreRun, 'id'>
 }
 
@@ -139,6 +139,13 @@ db.version(10)
 
 // Keeps each scoring run's results, so later runs don't replace them.
 db.version(11).stores({ scoreRuns: 'id, at, briefId' })
+
+// Searches are now sent to the shared database too (the super admin sees every search). Existing ones start as unsent.
+db.version(12)
+  .stores({ scoreRuns: 'id, at, briefId, _ts' })
+  .upgrade(async (tx) => {
+    await tx.table('scoreRuns').toCollection().modify({ _ts: 1 })
+  })
 
 db.on('populate', async (tx) => {
   // Built-in packs, presets and briefs exist in every browser; they aren't sent to the shared database.
