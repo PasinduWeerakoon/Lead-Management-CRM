@@ -9,31 +9,58 @@ import { routeApi } from './api/_routes'
 const securityHeaders = Object.fromEntries(vercel.headers[0].headers.map((h) => [h.key, h.value]))
 
 /** Server-only settings the /api functions read; never exposed to browser code (no VITE_ prefix). */
-const SERVER_ENV = ['MONGODB_URI', 'MONGODB_DB', 'GOOGLE_CLIENT_ID', 'SESSION_SECRET', 'ALLOWED_DOMAIN', 'ALLOWED_EMAILS', 'OPENAI_API_KEY', 'AI_DAILY_CAP_USD', 'ADZUNA_APP_ID', 'ADZUNA_APP_KEY', 'HUNTER_API_KEY', 'CORESIGNAL_API_KEY', 'SUPER_ADMIN_EMAIL', 'DATA_TABLE', 'DATA_STORE', 'DYNAMODB_ENDPOINT', 'AWS_REGION'] as const
+const SERVER_ENV = [
+  'MONGODB_URI',
+  'MONGODB_DB',
+  'GOOGLE_CLIENT_ID',
+  'SESSION_SECRET',
+  'ALLOWED_DOMAIN',
+  'ALLOWED_EMAILS',
+  'OPENAI_API_KEY',
+  'AI_DAILY_CAP_USD',
+  'ADZUNA_APP_ID',
+  'ADZUNA_APP_KEY',
+  'HUNTER_API_KEY',
+  'CORESIGNAL_API_KEY',
+  'SUPER_ADMIN_EMAIL',
+  'DATA_TABLE',
+  'DATA_STORE',
+  'DYNAMODB_ENDPOINT',
+  'AWS_REGION',
+] as const
 
-/** Runs the same /api functions as Vercel (Apollo forwarding, profiles, shared data) in the dev server. */
+/** Runs the same /api functions as Vercel (Apollo forwarding, profiles, shared data) in the dev and preview servers. */
 function apiRoutes(): Plugin {
+  type Use = (
+    fn: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void,
+  ) => void
+  const mount = (addMiddleware: Use) =>
+    addMiddleware(async (req, res, next) => {
+      const path = (req.url ?? '').split('?')[0]
+      if (!path.startsWith('/api/')) return next()
+      const chunks: Buffer[] = []
+      for await (const chunk of req) chunks.push(chunk as Buffer)
+      const headers = new Headers()
+      for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v)
+      const request = new Request(`http://localhost${req.url}`, {
+        method: req.method,
+        headers,
+        ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: Buffer.concat(chunks) } : {}),
+      })
+      const response = path === '/api/apollo' ? await handleApollo(request) : await routeApi(path, request)
+      if (!response) return next()
+      res.statusCode = response.status
+      response.headers.forEach((v, k) => res.setHeader(k, v))
+      res.end(await response.text())
+    })
   return {
     name: 'api-routes',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const path = (req.url ?? '').split('?')[0]
-        if (!path.startsWith('/api/')) return next()
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(chunk as Buffer)
-        const headers = new Headers()
-        for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v)
-        const request = new Request(`http://localhost${req.url}`, {
-          method: req.method,
-          headers,
-          ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: Buffer.concat(chunks) } : {}),
-        })
-        const response = path === '/api/apollo' ? await handleApollo(request) : await routeApi(path, request)
-        if (!response) return next()
-        res.statusCode = response.status
-        response.headers.forEach((v, k) => res.setHeader(k, v))
-        res.end(await response.text())
-      })
+    configureServer: (server) => {
+      mount(server.middlewares.use.bind(server.middlewares) as Use)
+    },
+    // `vite preview` too, so the production build (data in memory only) can be tried locally.
+    configurePreviewServer: (server) => {
+      mount(server.middlewares.use.bind(server.middlewares) as Use)
     },
   }
 }

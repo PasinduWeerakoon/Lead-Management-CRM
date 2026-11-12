@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { MEMORY_ONLY } from '../../lib/db'
 
 export interface AuthUser {
   email: string
@@ -84,6 +85,11 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await fetch('/api/auth', { method: 'DELETE' }).catch(() => undefined)
+    // Workspace data held in memory must not stay on screen for the next person: start a clean page.
+    if (MEMORY_ONLY) {
+      window.location.assign('/')
+      return
+    }
     set({ status: 'signed-out', user: null, message: null, notice: null })
   },
 }))

@@ -131,11 +131,12 @@ export function PrivacyPage() {
         <Section title="Where the data is kept">
           <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <li>
-              <B>In your browser:</B> connections, collected web data, notes and search results are stored in your own
-              browser on your own device.
+              <B>In 1BT's database:</B> connections, collected web data, notes and searches are kept in 1BT's own
+              database on Amazon Web Services (Mumbai region), shared with your team. Your browser holds them only in
+              memory while the app is open and keeps no copy after you close it.
             </li>
             <li>
-              <B>Cloud sync, if turned on:</B> a copy is kept in 1BT's database so it can be shared with your team.
+              <B>In your browser:</B> only your display settings, such as the theme.
             </li>
             {CORESIGNAL_ONLY && (
               <li>
@@ -155,8 +156,7 @@ export function PrivacyPage() {
         <Section title="How long it is kept">
           <p style={{ margin: 0 }}>
             Collected web data is refreshed every 30 days and job ads every 7. Activity records are kept for 12 months.
-            You can delete connections, searches or a whole profile at any time. Clearing your browser data removes
-            everything stored in that browser.
+            You can delete connections, searches or a whole profile at any time, which removes them from 1BT's database.
           </p>
         </Section>
 

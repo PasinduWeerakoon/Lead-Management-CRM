@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable, type Transaction } from 'dexie'
+import { IDBKeyRange as MemoryKeyRange, indexedDB as memoryIndexedDB } from 'fake-indexeddb'
 import type { Brief, Contact, ImportRecord, ScoreRun } from './schemas'
 import type { KeywordPack, SavedPreset, SavedView } from './filters/schema'
 import {
@@ -41,7 +42,19 @@ export const profileDbName = (id: string) => (id === DEFAULT_PROFILE_ID ? 'leads
 export const SYNCED_TABLES = ['contacts', 'imports', 'keywordPacks', 'views', 'briefs', 'presets', 'scoreRuns'] as const
 export type SyncedTable = (typeof SYNCED_TABLES)[number]
 
-export const db = new Dexie(profileDbName(activeProfileId())) as Dexie & {
+/**
+ * Where the workspace data (connections, searches, imports…) lives in the browser.
+ *  - Production build (AWS): in memory only. Nothing is written to the browser's storage; the shared
+ *    database (DynamoDB) is the only copy, loaded on every open and saved on every change.
+ *  - Dev server: the browser's IndexedDB, as before, so local work survives a reload without a database.
+ * Device preferences (theme, AI and Apollo key settings) stay in app-db either way.
+ */
+export const MEMORY_ONLY = import.meta.env.PROD && import.meta.env.MODE !== 'test'
+
+export const db = new Dexie(
+  profileDbName(activeProfileId()),
+  MEMORY_ONLY ? { indexedDB: memoryIndexedDB, IDBKeyRange: MemoryKeyRange } : undefined,
+) as Dexie & {
   contacts: EntityTable<Contact, 'id'>
   imports: EntityTable<ImportRecord, 'id'>
   keywordPacks: EntityTable<KeywordPack, 'id'>

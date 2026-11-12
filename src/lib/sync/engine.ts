@@ -1,5 +1,5 @@
 import type { Table } from 'dexie'
-import { activeProfileId, db, SYNCED_TABLES, type SyncedTable } from '../db'
+import { activeProfileId, db, MEMORY_ONLY, SYNCED_TABLES, type SyncedTable } from '../db'
 import { pullRecords, pushRecords, SyncError, type PulledRecord } from './api'
 import { markQuiet, quietTransactions } from './marks'
 
@@ -28,8 +28,14 @@ interface SyncState {
 }
 
 const stateKey = (profileId: string) => `leads.sync.${profileId}`
+// With the data in memory only, the cursors must be too: every open starts empty and loads everything.
+const memoryState = new Map<string, string>()
 
 export function readState(profileId = activeProfileId()): SyncState {
+  if (MEMORY_ONLY) {
+    const raw = memoryState.get(profileId)
+    return raw ? { pulled: {}, pushed: {}, deletes: {}, ...JSON.parse(raw) } : { pulled: {}, pushed: {}, deletes: {} }
+  }
   try {
     const raw = localStorage.getItem(stateKey(profileId))
     if (raw) return { pulled: {}, pushed: {}, deletes: {}, ...JSON.parse(raw) }
@@ -40,6 +46,10 @@ export function readState(profileId = activeProfileId()): SyncState {
 }
 
 function writeState(state: SyncState, profileId = activeProfileId()) {
+  if (MEMORY_ONLY) {
+    memoryState.set(profileId, JSON.stringify(state))
+    return
+  }
   try {
     localStorage.setItem(stateKey(profileId), JSON.stringify(state))
   } catch {
@@ -48,6 +58,7 @@ function writeState(state: SyncState, profileId = activeProfileId()) {
 }
 
 export function forgetState(profileId: string) {
+  memoryState.delete(profileId)
   try {
     localStorage.removeItem(stateKey(profileId))
   } catch {

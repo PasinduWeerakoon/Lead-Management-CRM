@@ -1,6 +1,6 @@
 import { ensureDefaultProfile, finishPendingDeletes } from '../lib/profiles'
 import { useSync } from '../lib/sync/store'
-import { migrateLegacySettings } from '../lib/db'
+import { MEMORY_ONLY, migrateLegacySettings } from '../lib/db'
 import { useApolloKey } from '../features/enrich/apolloKey'
 import { useEffect, useState } from 'react'
 import { App as AntApp, ConfigProvider, Layout } from 'antd'
@@ -96,6 +96,15 @@ function Workspace() {
       void useSync.getState().start()
     })
   }, [initAi, initApollo])
+  // Data kept only in memory starts empty: wait for the first load from the server instead of flashing empty pages.
+  const ready = useSync((s) => s.ready)
+  if (MEMORY_ONLY && !ready)
+    return (
+      <div style={{ height: '100%', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12 }}>
+        <Spin />
+        <span style={{ color: 'var(--text-3)' }}>Loading your workspace…</span>
+      </div>
+    )
 
   return (
     <>
