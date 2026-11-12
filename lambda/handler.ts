@@ -60,7 +60,9 @@ export async function handler(event: FunctionUrlEvent): Promise<FunctionUrlResul
   let response: Response | undefined
   try {
     response = path === '/api/apollo' ? await handleApollo(request) : await routeApi(path, request)
-  } catch {
+  } catch (err) {
+    // Logged (CloudWatch, kept 14 days) so the cause can be found; the browser gets a plain message.
+    console.error('Unhandled API error', path, err instanceof Error ? `${err.name}: ${err.message}` : err)
     return reply(500, 'The server hit an unexpected error.')
   }
   if (!response) return reply(404, 'Not found.')

@@ -1,12 +1,12 @@
 # Leads on AWS: services report
 
-Generated 2026-11-12 15:42 UTC from the live stack. Re-create it with `npm run aws:report`.
+Generated 2026-11-12 16:08 UTC from the live stack. Re-create it with `npm run aws:report`.
 
 | | |
 |---|---|
 | Account | 544011261075 |
 | Region | ap-south-1 |
-| Stack | LeadsApp (CREATE_COMPLETE) |
+| Stack | LeadsApp (UPDATE_COMPLETE) |
 | App URL | https://d12pr5zx6tr3p5.cloudfront.net |
 | Data table | leadsapp-data |
 | Stack console | https://ap-south-1.console.aws.amazon.com/cloudformation/home?region=ap-south-1#/stacks |

@@ -113,7 +113,14 @@ export class LeadsStack extends cdk.Stack {
       },
     })
     spend?.grant(api, 'dynamodb:GetItem', 'dynamodb:UpdateItem')
-    data.grant(api, 'dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:BatchWriteItem')
+    data.grant(
+      api,
+      'dynamodb:GetItem',
+      'dynamodb:PutItem',
+      'dynamodb:Query',
+      'dynamodb:UpdateItem',
+      'dynamodb:BatchWriteItem',
+    )
     const apiUrl = api.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE })
 
     // --- Web app: private bucket ---------------------------------------------------------------
