@@ -10,3 +10,4 @@ infra/node_modules
 *.tsbuildinfo
 company-hq.csv
 .env
+infra/template.json

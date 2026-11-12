@@ -7,7 +7,7 @@ Browser ──► CloudFront ──┬─► S3 (web app, private)
                          └─► /api/*  ──► Lambda (Node.js 22, Arm64, 512 MB, 60 s)
                                            ├─► company websites + job boards
                                            ├─► Apollo (your key)
-                                           └─► MongoDB Atlas (optional)
+                                           └─► DynamoDB (shared data, on-demand)
 AI providers (Claude, GPT, Gemini, Groq, OpenRouter) are called straight from the browser with each user's key.
 ```
 
@@ -67,6 +67,23 @@ AWS_PROFILE=leads OPENAI_API_KEY='sk-…' npm run deploy
 ```
 
 Optional shared database: add `MONGODB_URI='mongodb+srv://…'` to the deploy command. In Atlas → Network Access, Lambda needs `0.0.0.0/0` (with a strong database password), because Lambda has no fixed IP without a paid NAT gateway.
+
+## One command up and down
+
+`scripts/aws.sh` wraps everything (also available as `npm run aws:…`). It reads the server keys from `.env.local` without printing them, and asks you to type a word before changing anything.
+
+```bash
+npm run aws:template                       # writes infra/template.json (CloudFormation, placeholders only, no AWS calls)
+AWS_PROFILE=leads npm run aws:up           # builds and creates or updates every service
+AWS_PROFILE=leads npm run aws:status       # stack state, app URL and table name
+AWS_PROFILE=leads npm run aws:down         # deletes every service, keeps the data table
+AWS_PROFILE=leads scripts/aws.sh down --delete-data   # also deletes the data table (cannot be undone)
+```
+
+- Region defaults to `ap-south-1` (Mumbai); set `AWS_REGION` to change it.
+- The data table is named `leadsapp-data` and is kept on `down`. The next `up` finds it and reuses it, so no data is lost.
+- Add `BUDGET_EMAIL=you@company.com` (in `.env.local` or the command) for an AWS budget alert: an email at 80% of $3 a month, or when the month is forecast to go over. Change the amount with `BUDGET_USD`. The first two AWS budgets are free.
+- Services created: S3 bucket and CloudFront (web app), one Arm64 Lambda with a Function URL (API), DynamoDB tables for data and AI spend, a log group kept 14 days. No VPC, NAT gateway, load balancer or database server, so idle cost is close to $0.
 
 ## Updating
 

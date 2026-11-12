@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import * as cdk from 'aws-cdk-lib'
+import * as budgets from 'aws-cdk-lib/aws-budgets'
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
@@ -24,6 +25,12 @@ export interface LeadsStackProps extends cdk.StackProps {
   aiDailyCapUsd?: number
   /** Other server settings passed to the Lambda as they are (Google sign-in, Coresignal, Hunter…). */
   serverEnv?: Record<string, string>
+  /** Reuse the data table kept from an earlier `down` instead of creating a new one. */
+  existingDataTable?: string
+  /** Email for a monthly AWS budget alert (free); off when not set. */
+  budgetEmail?: string
+  /** Monthly budget in USD for that alert. */
+  budgetUsd?: number
 }
 
 /**
@@ -58,19 +65,26 @@ export class LeadsStack extends cdk.Stack {
         })
       : undefined
 
-    // Profiles and synced records (see api/_store-dynamo.ts). On-demand and kept if the stack is deleted.
-    const data = new dynamodb.Table(this, 'Data', {
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
-    })
-    data.addLocalSecondaryIndex({
-      indexName: 'bySrv',
-      sortKey: { name: 'srv', type: dynamodb.AttributeType.NUMBER },
-      projectionType: dynamodb.ProjectionType.ALL,
-    })
+    // Profiles and synced records (see api/_store-dynamo.ts). On-demand, with a fixed name, and kept when
+    // the stack is deleted, so a later deploy can pick the same data up again (existingDataTable).
+    let data: dynamodb.ITable
+    if (props.existingDataTable) data = dynamodb.Table.fromTableName(this, 'Data', props.existingDataTable)
+    else {
+      const table = new dynamodb.Table(this, 'Data', {
+        tableName: `${id.toLowerCase()}-data`,
+        partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      })
+      table.addLocalSecondaryIndex({
+        indexName: 'bySrv',
+        sortKey: { name: 'srv', type: dynamodb.AttributeType.NUMBER },
+        projectionType: dynamodb.ProjectionType.ALL,
+      })
+      data = table
+    }
 
     const api = new lambda.Function(this, 'Api', {
       description: 'Leads /api/* — company research, Apollo forwarding, optional shared database',
@@ -193,5 +207,28 @@ export class LeadsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BucketName', { value: site.bucketName })
     new cdk.CfnOutput(this, 'ApiFunction', { value: api.functionName })
     new cdk.CfnOutput(this, 'DataTable', { value: data.tableName })
+
+    // --- Cost guard: an email when this month's AWS bill passes 80% of the budget, or is forecast to exceed it.
+    if (props.budgetEmail) {
+      const subscribers = [{ subscriptionType: 'EMAIL', address: props.budgetEmail }]
+      new budgets.CfnBudget(this, 'MonthlyBudget', {
+        budget: {
+          budgetName: `${id}-monthly`,
+          budgetType: 'COST',
+          timeUnit: 'MONTHLY',
+          budgetLimit: { amount: props.budgetUsd ?? 3, unit: 'USD' },
+        },
+        notificationsWithSubscribers: [
+          {
+            notification: { notificationType: 'ACTUAL', comparisonOperator: 'GREATER_THAN', threshold: 80 },
+            subscribers,
+          },
+          {
+            notification: { notificationType: 'FORECASTED', comparisonOperator: 'GREATER_THAN', threshold: 100 },
+            subscribers,
+          },
+        ],
+      })
+    }
   }
 }
