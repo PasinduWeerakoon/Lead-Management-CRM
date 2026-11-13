@@ -418,9 +418,9 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
         progress(`Checking SEC EDGAR and Wikidata for ${company.company}…`)
         found = mergeExtras(found, await fetchCompanyExtras(company.company, found?.domain ?? site, opts.signal))
         if (!found) {
-          await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
+          await save(company, { status: 'no_site', note: 'No company record was found for this company.', at })
           summary.noSite++
-          progress(`${company.company}: not found in Coresignal (${credits} credits)`)
+          progress(`${company.company}: no company record found (${credits} credits)`)
           return
         }
         await save(company, { status: 'found', ...splitOwnProducts(company.company, found), at })

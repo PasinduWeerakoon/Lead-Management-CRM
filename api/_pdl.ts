@@ -54,7 +54,19 @@ export class Pdl {
   remaining?: number
   constructor(private f: Fetch) {}
 
+  /** Waits and tries again when PDL says it is busy (several lookups run at once). */
   async get(path: string, params: Record<string, string>): Promise<Obj | undefined> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.once(path, params)
+      } catch (err) {
+        if (!(err instanceof PdlError) || err.status !== 429 || attempt >= 3) throw err
+        await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)))
+      }
+    }
+  }
+
+  private async once(path: string, params: Record<string, string>): Promise<Obj | undefined> {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), TIMEOUT)
     try {
@@ -185,6 +197,7 @@ export async function pdlCompany(pdl: Pdl, opts: { linkedin?: string; name: stri
     : opts.domain
       ? { website: opts.domain }
       : { name: opts.name }
-  const c = await pdl.get('company/enrich', { ...params, min_likelihood: '4' })
+  // A name-only match scores 3 of 10 even for Google, so PDL's own default threshold is used.
+  const c = await pdl.get('company/enrich', params)
   return c ? mapPdlCompany(c) : undefined
 }

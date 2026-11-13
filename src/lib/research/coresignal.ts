@@ -37,12 +37,12 @@ export async function fetchCoresignalPerson(
   const at = new Date().toISOString()
   if (!c.profileUrl || !/linkedin\.com\/in\//i.test(c.profileUrl))
     return {
-      web: { status: 'not_found', note: 'No LinkedIn profile URL to look up in Coresignal.', at },
+      web: { status: 'not_found', note: 'No LinkedIn profile URL to look up.', at },
       credits: 0,
     }
   const r = await call<{ web: Omit<PersonWeb, 'at'> | null }>({ op: 'person', url: c.profileUrl }, signal)
   return {
-    web: r.web ? { ...r.web, at } : { status: 'not_found', note: 'Coresignal has no record for this profile.', at },
+    web: r.web ? { ...r.web, at } : { status: 'not_found', note: 'No profile record was found for this LinkedIn URL.', at },
     credits: r.credits ?? 0,
   }
 }
