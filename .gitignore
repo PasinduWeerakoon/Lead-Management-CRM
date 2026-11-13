@@ -11,3 +11,4 @@ infra/node_modules
 company-hq.csv
 .env
 infra/template.json
+.brave-usage.json
