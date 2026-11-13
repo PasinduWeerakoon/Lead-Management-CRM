@@ -87,6 +87,11 @@ interface RunOptions {
    * doesn't list. Runs a few companies at a time.
    */
   web?: { provider: string }
+  /**
+   * Jobs only: reread each company's careers pages and job boards, plus Adzuna, and replace its open
+   * jobs with what is listed now. Other company facts are kept, and no PDL or Coresignal credits are used.
+   */
+  jobsOnly?: boolean
   /** Copy fresh research from other people at the same company instead of researching again (default on). */
   reuse?: boolean
   /** Overridable in tests. */
@@ -173,8 +178,26 @@ export async function reuseFreshResearch(companies: ResearchCompany[], maxAgeDay
   return left
 }
 
+/** Replaces the open jobs on everyone at this company; everything else found before is kept. */
+async function saveJobs(company: ResearchCompany, hiring: NonNullable<CompanyResearch['hiring']>, replace: boolean) {
+  const ids = company.people.map((p) => p.id)
+  await db.transaction('rw', db.contacts, async () => {
+    const current = (await db.contacts.bulkGet(ids)).filter((c): c is Contact => !!c)
+    await db.contacts.bulkPut(
+      current.map((c) => {
+        const r = c.research
+        if (r?.status !== 'found') return c
+        const seen = new Set(hiring.map((j) => j.title.toLowerCase()))
+        const kept = replace ? [] : (r.hiring ?? []).filter((j) => !seen.has(j.title.toLowerCase()))
+        const next = [...hiring, ...kept].slice(0, 60)
+        return { ...c, research: { ...r, hiring: next, jobsTotal: next.length } }
+      }),
+    )
+  })
+}
+
 export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
-  const companies = opts.reuse === false ? opts.companies : await reuseFreshResearch(opts.companies)
+  const companies = opts.reuse === false || opts.jobsOnly ? opts.companies : await reuseFreshResearch(opts.companies)
   const reused = opts.companies.length - companies.length
   if (reused)
     opts.onProgress({
@@ -242,7 +265,7 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
   try {
     // 1. Suggest domains for companies whose website isn't known yet (checked by visiting later).
     // Coresignal mode looks companies up by name, so no AI website guessing is needed.
-    const unknown = CORESIGNAL_ONLY ? [] : companies.filter((c) => !c.domain)
+    const unknown = CORESIGNAL_ONLY || opts.jobsOnly ? [] : companies.filter((c) => !c.domain)
     const suggestions = new Map<string, string[]>()
     for (let i = 0; i < unknown.length; i += DOMAIN_BATCH) {
       if (opts.signal.aborted) break
@@ -349,6 +372,29 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
     const researchOne = async (company: ResearchCompany, suggested: string[]) => {
       const at = new Date().toISOString()
 
+      if (opts.jobsOnly) {
+        const site = company.domain
+        let siteJobs: NonNullable<CompanyResearch['hiring']> = []
+        let siteRead = false
+        if (site) {
+          try {
+            const own = await readCompanySite(company, [site], true)
+            siteRead = !!own.found
+            siteJobs = own.found?.hiring ?? []
+          } catch (err) {
+            if (err instanceof AiError && err.kind === 'cancelled') throw err
+          }
+        }
+        progress(`Checking Adzuna job ads for ${company.company}…`)
+        const extras = await fetchCompanyExtras(company.company, site, opts.signal)
+        const hiring = mergeExtras({ hiring: siteJobs }, extras)?.hiring ?? siteJobs
+        // A site that couldn't be read this time keeps the jobs found before, adding any new ones.
+        await saveJobs(company, hiring, siteRead)
+        summary.found++
+        progress(`${company.company}: ${hiring.length ? `${hiring.length} open jobs` : 'no open jobs listed'}`)
+        return
+      }
+
       // Coresignal first: one licensed company record with its jobs. The old sources below stay
       // as they were and run again when CORESIGNAL_ONLY is false.
       if (CORESIGNAL_ONLY) {
@@ -368,12 +414,9 @@ export async function runResearch(opts: RunOptions): Promise<ResearchSummary> {
             progress(`${company.company}: website could not be read, keeping the Coresignal record`)
           }
         }
-        // Free official and open records: SEC EDGAR (US filers) and Wikidata. No Coresignal credits.
+        // Free official and open records: SEC EDGAR (US filers), Wikidata and Adzuna job ads.
         progress(`Checking SEC EDGAR and Wikidata for ${company.company}…`)
-        found = mergeExtras(
-          found,
-          await fetchCompanyExtras(company.company, found?.domain ?? site, opts.signal, { jobs: false }),
-        )
+        found = mergeExtras(found, await fetchCompanyExtras(company.company, found?.domain ?? site, opts.signal))
         if (!found) {
           await save(company, { status: 'no_site', note: 'Coresignal has no record for this company.', at })
           summary.noSite++

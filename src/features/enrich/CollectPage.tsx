@@ -82,7 +82,7 @@ export function CollectPage() {
   const mine = sharing.mine
   // "Collect everything" runs companies first, then people. Nothing starts until someone clicks.
   const [thenPeople, setThenPeople] = useState(false)
-  const [running, setRunning] = useState<'companies' | 'people' | undefined>()
+  const [running, setRunning] = useState<'companies' | 'people' | 'jobs' | undefined>()
   const [auto, setAuto] = useState(false)
   // The connections this run works on.
   const [scope, setScope] = useState<Contact[]>([])
@@ -110,6 +110,12 @@ export function CollectPage() {
               </Button>
               <Button onClick={() => start('people', mine)} disabled={!mine.length}>
                 My people only
+              </Button>
+              <Button
+                onClick={() => (setScope(mine), setRunning('jobs'))}
+                disabled={!mine.some((c) => c.research?.status === 'found')}
+              >
+                Recheck jobs
               </Button>
             </Flex>
           </Flex>
@@ -164,7 +170,7 @@ export function CollectPage() {
                   title="Open jobs"
                   note={
                     CORESIGNAL_ONLY
-                      ? 'Open job posts from Coresignal'
+                      ? 'Careers pages, Greenhouse, Lever, Workable, Ashby and Adzuna. Use Recheck jobs to refresh'
                       : 'Careers pages, Greenhouse, Lever, Workable, Ashby'
                   }
                   done={s.sitesFound}
@@ -251,6 +257,17 @@ export function CollectPage() {
           onClose={() => {
             setRunning(thenPeople ? 'people' : undefined)
             setThenPeople(false)
+            sharing.refresh()
+          }}
+        />
+      )}
+      {running === 'jobs' && (
+        <ResearchModal
+          shown={scope}
+          selected={[]}
+          jobsOnly
+          onClose={() => {
+            setRunning(undefined)
             sharing.refresh()
           }}
         />

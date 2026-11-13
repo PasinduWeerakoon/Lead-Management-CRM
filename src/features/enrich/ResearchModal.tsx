@@ -20,6 +20,8 @@ interface Props {
   autoStart?: boolean
   /** Close by itself when finished, so the next step can begin. */
   autoClose?: boolean
+  /** Recheck open jobs only, for companies already collected (careers pages, job boards, Adzuna). */
+  jobsOnly?: boolean
 }
 
 /** Rough tokens per company: one site read (~4k in, ~0.8k out) plus a share of the website-finding step. */
@@ -27,7 +29,7 @@ const IN_PER_COMPANY = 4500
 const OUT_PER_COMPANY = 1200
 
 /** "Company research": read each company's own website and job board, then optionally score with a brief. */
-export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }: Props) {
+export function ResearchModal({ shown, selected, onClose, autoStart, autoClose, jobsOnly }: Props) {
   const { status, key, settings } = useAi()
   const briefs = useLiveQuery(() => db.briefs.orderBy('updatedAt').reverse().toArray(), [], [] as Brief[])
   const [scope, setScope] = useState<'shown' | 'selected'>(selected.length ? 'selected' : 'shown')
@@ -42,11 +44,14 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
   const abort = useRef<AbortController | null>(null)
 
   const pool = scope === 'selected' && selected.length ? selected : shown
-  const plan = useMemo(() => planResearch(pool, redo), [pool, redo])
-  const companies = plan.companies
+  const plan = useMemo(() => planResearch(pool, redo || !!jobsOnly), [pool, redo, jobsOnly])
+  // Jobs are rechecked only where a company record was found before.
+  const companies = jobsOnly
+    ? plan.companies.filter((c) => c.people.some((p) => p.research?.status === 'found'))
+    : plan.companies
   const isGpt = settings.provider === 'openai'
   const [useWeb, setUseWeb] = useState(true)
-  const web = isGpt && useWeb
+  const web = isGpt && useWeb && !jobsOnly
   const alreadyDone = pool.filter((c) => c.research).length
   const model = modelById(settings.model)
   const webCost = web ? estimateWebCost(companies.length) : { low: 0, high: 0 }
@@ -68,6 +73,7 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
       onProgress: setProgress,
       beforeCall: checkBudget,
       reuse: !redo,
+      jobsOnly,
       ...(web ? { web: { provider: settings.provider } } : {}),
     })
     setSummary(result)
@@ -118,7 +124,7 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
       open
       title={
         <Flex align="center" gap={8}>
-          <WorldOutlined /> Company research
+          <WorldOutlined /> {jobsOnly ? 'Recheck open jobs' : 'Company research'}
         </Flex>
       }
       width={600}
@@ -143,7 +149,8 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
                   )
                 }
               >
-                Research {companies.length.toLocaleString()} {companies.length === 1 ? 'company' : 'companies'}
+                {jobsOnly ? 'Recheck jobs at' : 'Research'} {companies.length.toLocaleString()}{' '}
+                {companies.length === 1 ? 'company' : 'companies'}
               </Button>
             </Flex>
           </Flex>
@@ -160,14 +167,23 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
     >
       {phase === 'setup' && (
         <Flex vertical gap={16} style={{ marginTop: 8 }}>
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            For each company: find its official website (checked by finding the company’s name on it), read a few public
-            pages and its job board, and keep only facts quoted from those pages: HQ, industry, technologies, relevant
-            open roles and a short summary. With web search on, it also searches the web for companies whose site can’t
-            be read and for open roles on job sites, each linked to its page. Empty fields in the table are filled;
-            nothing you entered is replaced. Public LinkedIn job posts and company pages are used when the search finds
-            them; Indeed and Glassdoor never are.
-          </Typography.Text>
+          {jobsOnly ? (
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              For each company already collected: read its careers pages and the job boards they link to (Greenhouse,
+              Lever, Workable, Ashby), then check Adzuna job ads. Each company’s open jobs are replaced with what is
+              listed now; closed ones drop off. Other company details are kept, and no PDL or Coresignal credits are
+              used. Run it as often as you like.
+            </Typography.Text>
+          ) : (
+            <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+              For each company: find its official website (checked by finding the company’s name on it), read a few
+              public pages and its job board, and keep only facts quoted from those pages: HQ, industry, technologies,
+              relevant open roles and a short summary. With web search on, it also searches the web for companies whose
+              site can’t be read and for open roles on job sites, each linked to its page. Empty fields in the table are
+              filled; nothing you entered is replaced. Public LinkedIn job posts and company pages are used when the
+              search finds them; Indeed and Glassdoor never are.
+            </Typography.Text>
+          )}
 
           {status === 'none' && (
             <div className="panel" style={{ padding: 16 }}>
@@ -176,16 +192,18 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
           )}
           {status === 'locked' && <UnlockForm />}
 
-          <Flex vertical gap={4}>
-            <Checkbox checked={web} disabled={!isGpt} onChange={(e) => setUseWeb(e.target.checked)}>
-              Also search the web (finds far more, about 1–2 cents per company)
-            </Checkbox>
-            {!isGpt && (
-              <Typography.Text type="secondary" style={{ fontSize: 12, paddingLeft: 24 }}>
-                Needs GPT. Choose OpenAI (GPT) under AI assistant.
-              </Typography.Text>
-            )}
-          </Flex>
+          {!jobsOnly && (
+            <Flex vertical gap={4}>
+              <Checkbox checked={web} disabled={!isGpt} onChange={(e) => setUseWeb(e.target.checked)}>
+                Also search the web (finds far more, about 1–2 cents per company)
+              </Checkbox>
+              {!isGpt && (
+                <Typography.Text type="secondary" style={{ fontSize: 12, paddingLeft: 24 }}>
+                  Needs GPT. Choose OpenAI (GPT) under AI assistant.
+                </Typography.Text>
+              )}
+            </Flex>
+          )}
 
           <Flex vertical gap={6}>
             <Typography.Text strong>Whose companies</Typography.Text>
@@ -197,28 +215,30 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
                 </Radio>
               </Flex>
             </Radio.Group>
-            {alreadyDone > 0 && (
+            {alreadyDone > 0 && !jobsOnly && (
               <Checkbox checked={redo} onChange={(e) => setRedo(e.target.checked)}>
                 Research again for {alreadyDone.toLocaleString()} {alreadyDone === 1 ? 'person' : 'people'} already done
               </Checkbox>
             )}
           </Flex>
 
-          <Flex vertical gap={6}>
-            <Typography.Text strong>Then score with AI</Typography.Text>
-            <Select
-              value={briefId}
-              onChange={setBriefId}
-              options={[
-                { value: 'none', label: 'Don’t score — research only' },
-                ...briefs.map((b) => ({ value: b.id, label: `Score with “${b.name}”` })),
-              ]}
-              style={{ maxWidth: 420 }}
-            />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              Scores everyone at the researched companies, using what was found as verified evidence.
-            </Typography.Text>
-          </Flex>
+          {!jobsOnly && (
+            <Flex vertical gap={6}>
+              <Typography.Text strong>Then score with AI</Typography.Text>
+              <Select
+                value={briefId}
+                onChange={setBriefId}
+                options={[
+                  { value: 'none', label: 'Don’t score — research only' },
+                  ...briefs.map((b) => ({ value: b.id, label: `Score with “${b.name}”` })),
+                ]}
+                style={{ maxWidth: 420 }}
+              />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Scores everyone at the researched companies, using what was found as verified evidence.
+              </Typography.Text>
+            </Flex>
+          )}
 
           <div
             style={{
@@ -275,7 +295,7 @@ export function ResearchModal({ shown, selected, onClose, autoStart, autoClose }
       {phase === 'done' && summary && (
         <Result
           status={summary.stopped && !summary.found ? 'warning' : 'success'}
-          title={`Researched ${summary.found.toLocaleString()} of ${summary.total.toLocaleString()} companies`}
+          title={`${jobsOnly ? 'Rechecked jobs at' : 'Researched'} ${summary.found.toLocaleString()} of ${summary.total.toLocaleString()} companies`}
           subTitle={
             <Flex vertical gap={4}>
               {summary.stopped && <span>{summary.stopped}</span>}
