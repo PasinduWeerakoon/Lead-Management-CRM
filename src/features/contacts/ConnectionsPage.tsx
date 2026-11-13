@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { App, Button, Checkbox, Empty, Flex, Input, Select } from 'antd'
+import { App, Button, Checkbox, Empty, Flex, Input, Pagination, Select } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { SearchOutlined } from '../../components/icons'
@@ -10,7 +10,7 @@ import { STATUS_META } from '../../components/tags'
 import { PersonPanel } from './PersonPanel'
 
 type WebFilter = 'any' | 'hiring' | 'past' | 'none'
-const PAGE = 100
+const PAGE_SIZES = [25, 50, 100]
 
 const hiringCount = (c: Contact) => (c.research?.status === 'found' ? (c.research.hiring?.length ?? 0) : 0)
 const pastJobs = (c: Contact) => c.web?.career ?? []
@@ -41,7 +41,8 @@ export function ConnectionsPage() {
   const query = useDeferredValue(q.trim().toLowerCase())
   const [status, setStatus] = useState<LeadStatus | 'any'>('any')
   const [web, setWeb] = useState<WebFilter>('any')
-  const [limit, setLimit] = useState(PAGE)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [selected, setSelected] = useState<string[]>([])
   const openId = params.get('open') ?? undefined
 
@@ -62,6 +63,10 @@ export function ConnectionsPage() {
         .sort((a, b) => a.fullName.localeCompare(b.fullName)),
     [contacts, status, web, query],
   )
+  // Back to the last page that still has rows when filters shrink the list.
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const current = Math.min(page, pages)
+  const first = (current - 1) * pageSize
   const open = contacts.find((c) => c.id === openId) ?? rows[0]
 
   const bulk = async (s: LeadStatus) => {
@@ -98,14 +103,14 @@ export function ConnectionsPage() {
               value={q}
               onChange={(e) => {
                 setQ(e.target.value)
-                setLimit(PAGE)
+                setPage(1)
               }}
               style={{ flex: '1 1 220px', maxWidth: 360 }}
             />
             <Select
               aria-label="Status"
               value={status}
-              onChange={setStatus}
+              onChange={(v) => (setStatus(v), setPage(1))}
               style={{ width: 150 }}
               options={[
                 { value: 'any', label: 'Any status' },
@@ -115,7 +120,7 @@ export function ConnectionsPage() {
             <Select<WebFilter>
               aria-label="Web data"
               value={web}
-              onChange={setWeb}
+              onChange={(v) => (setWeb(v), setPage(1))}
               style={{ width: 180 }}
               options={[
                 { value: 'any', label: 'Any web data' },
@@ -161,7 +166,7 @@ export function ConnectionsPage() {
             </div>
           ) : (
             <div className="panel" style={{ padding: 0 }}>
-              {rows.slice(0, limit).map((c, i) => {
+              {rows.slice(first, first + pageSize).map((c, i) => {
                 const line = dataLine(c)
                 const active = open?.id === c.id
                 return (
@@ -201,6 +206,12 @@ export function ConnectionsPage() {
                         textAlign: 'left',
                       }}
                     >
+                      <span
+                        className="num"
+                        style={{ width: 32, flex: 'none', textAlign: 'right', fontSize: 13, color: 'var(--text-3)' }}
+                      >
+                        {first + i + 1}
+                      </span>
                       <span
                         aria-hidden
                         style={{
@@ -255,11 +266,23 @@ export function ConnectionsPage() {
             </div>
           )}
           {rows.length > 0 && (
-            <Flex justify="space-between" align="center">
+            <Flex justify="space-between" align="center" gap={12} wrap>
               <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                Showing {Math.min(limit, rows.length).toLocaleString()} of {rows.length.toLocaleString()}
+                Showing {(first + 1).toLocaleString()}–{Math.min(first + pageSize, rows.length).toLocaleString()} of{' '}
+                {rows.length.toLocaleString()}
               </span>
-              {rows.length > limit && <Button onClick={() => setLimit((l) => l + PAGE)}>Show more</Button>}
+              <Pagination
+                size="small"
+                current={current}
+                pageSize={pageSize}
+                total={rows.length}
+                showSizeChanger
+                pageSizeOptions={PAGE_SIZES}
+                onChange={(p, size) => {
+                  setPage(size !== pageSize ? 1 : p)
+                  setPageSize(size)
+                }}
+              />
             </Flex>
           )}
         </section>
