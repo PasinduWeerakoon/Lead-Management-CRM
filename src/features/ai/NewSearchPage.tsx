@@ -170,7 +170,11 @@ export function NewSearchPage() {
             ...(!CORESIGNAL_ONLY && settings.provider === 'openai' ? { web: { provider: settings.provider } } : {}),
           })
           refreshed.companies = r.done
-          if (r.stopped) throw new AiError(r.stopped, 'other')
+          // Stopping is the only reason to end here. Anything else (credits used up, a busy provider) skips
+          // the rest of this refresh and the search goes on with the data already collected.
+          if (r.stopped && signal.aborted) throw new AiError(r.stopped, 'cancelled')
+          if (r.stopped)
+            step('company', `Company refresh skipped: ${r.stopped} Continuing with the data already collected.`)
         }
         const toSearch = planWeb(people.filter(stalePerson), true)
         if (toSearch.length && (CORESIGNAL_ONLY || settings.provider === 'openai')) {
@@ -187,7 +191,11 @@ export function NewSearchPage() {
             },
           })
           refreshed.people = w.done
-          if (w.stopped) throw new AiError(w.stopped, 'other')
+          // Stopping is the only reason to end here. Anything else (credits used up, a busy provider) skips
+          // the rest of this refresh and the search goes on with the data already collected.
+          if (w.stopped && signal.aborted) throw new AiError(w.stopped, 'cancelled')
+          if (w.stopped)
+            step('person', `People refresh skipped: ${w.stopped} Continuing with the data already collected.`)
         }
       }
 
