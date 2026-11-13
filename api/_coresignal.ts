@@ -1,5 +1,6 @@
 import { requireUser } from './_auth.js'
 import { json } from './_db.js'
+import { Pdl, PdlError, pdlCompany, pdlPerson, pdlSelected } from './_pdl.js'
 
 /**
  * Coresignal: licensed people, company and job data, fetched on the server (CORESIGNAL_API_KEY).
@@ -328,7 +329,9 @@ export async function handleCoresignal(request: Request, f: Fetch = fetch): Prom
   const u = new URL(request.url)
   const op = u.searchParams.get('op')
   const q = (k: string, max = 300) => (u.searchParams.get(k) ?? '').trim().slice(0, max)
-  if (op === 'status') return json(200, { configured: coresignalConfigured() })
+  if (op === 'status') return json(200, { configured: pdlSelected() || coresignalConfigured() })
+  // Trial: DATA_PROVIDER=pdl sends the same lookups to People Data Labs, mapped to the same shapes.
+  if (pdlSelected()) return handlePdl(op, q, f)
   if (!coresignalConfigured())
     return json(503, { error: 'Coresignal is not set up. Add CORESIGNAL_API_KEY on the server.' })
   const cs = new Coresignal(f)
@@ -349,6 +352,29 @@ export async function handleCoresignal(request: Request, f: Fetch = fetch): Prom
   } catch (err) {
     if (err instanceof CoresignalError) return json(err.status === 402 ? 402 : 502, { error: err.message })
     return json(502, { error: 'Coresignal could not be reached.' })
+  }
+  return json(400, { error: 'Unknown op.' })
+}
+
+async function handlePdl(op: string | null, q: (k: string, max?: number) => string, f: Fetch): Promise<Response> {
+  const pdl = new Pdl(f)
+  try {
+    if (op === 'person') {
+      const url = q('url', 500)
+      if (!linkedinShorthand(url, 'in')) return json(400, { error: 'A LinkedIn profile URL is needed.' })
+      const r = await pdlPerson(pdl, url)
+      return json(200, { ...(r ?? { web: null }), credits: pdl.credits, remaining: pdl.remaining })
+    }
+    if (op === 'company') {
+      const name = q('name', 200)
+      if (name.length < 2) return json(400, { error: 'Missing company name.' })
+      const linkedin = /^[a-z0-9._%-]{1,120}$/i.test(q('linkedin')) ? q('linkedin') : undefined
+      const research = await pdlCompany(pdl, { name, domain: q('domain', 200) || undefined, linkedin })
+      return json(200, { research: research ?? null, credits: pdl.credits, remaining: pdl.remaining })
+    }
+  } catch (err) {
+    if (err instanceof PdlError) return json(err.status === 402 ? 402 : 502, { error: err.message })
+    return json(502, { error: 'People Data Labs could not be reached.' })
   }
   return json(400, { error: 'Unknown op.' })
 }

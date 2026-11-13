@@ -8,7 +8,7 @@ import { LeadsStack } from '../lib/leads-stack'
  * Optional: MONGODB_URI='mongodb+srv://…' to switch on the shared database.
  * Optional: OPENAI_API_KEY='sk-…' for a company GPT key kept on the server (AI_DAILY_CAP_USD, default 10).
  * Shared data goes to the stack's DynamoDB table; these are passed to the server when set:
- *   SESSION_SECRET, SUPER_ADMIN_EMAIL, CORESIGNAL_API_KEY, HUNTER_API_KEY,
+ *   SESSION_SECRET, SUPER_ADMIN_EMAIL, CORESIGNAL_API_KEY, PDL_API_KEY, DATA_PROVIDER, HUNTER_API_KEY,
  *   ADZUNA_APP_ID, ADZUNA_APP_KEY
  * Region and account come from your AWS CLI profile (AWS_PROFILE / AWS_REGION).
  */
@@ -20,6 +20,8 @@ const PASSED = [
   'SESSION_SECRET',
   'SUPER_ADMIN_EMAIL',
   'CORESIGNAL_API_KEY',
+  'PDL_API_KEY',
+  'DATA_PROVIDER',
   'HUNTER_API_KEY',
   'ADZUNA_APP_ID',
   'ADZUNA_APP_KEY',
