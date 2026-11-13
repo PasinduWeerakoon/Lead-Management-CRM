@@ -142,8 +142,10 @@ async function sendViaServer(path: string, init: RequestInit, modelLabel: string
     announceCap({ message, spentUsd: body.spentUsd, capUsd: body.capUsd })
     throw Object.assign(new AiError(message, 'limit'), { status: 429 })
   }
+  // A 401 from this app means signed out; one passed through from OpenAI means the server's key was refused.
+  if (res.status === 401 && typeof body.error === 'string') throw new AiError('Please sign in again.', 'auth')
   if (res.status === 401)
-    throw new AiError('Enter the workspace access code (sidebar) to use the company AI key.', 'auth')
+    throw Object.assign(new AiError('The company OpenAI key was refused or has expired. Ask the admin to replace it.', 'auth'), { status: 401 })
   if (typeof body.error === 'string') throw Object.assign(new AiError(body.error, 'other'), { status: res.status })
   // OpenAI's own error, passed through by the server.
   throw Object.assign(
