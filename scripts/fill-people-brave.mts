@@ -11,6 +11,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { getStore, type StoredRecord } from '../api/_store.ts'
+import { careerFromText, validEmployer } from './career-from-snippets.mts'
 
 const MONTHLY_CAP = 900
 const LEDGER = new URL('../.brave-usage.json', import.meta.url)
@@ -74,6 +75,19 @@ function fromLinkedIn(r: Obj, name: string) {
   return { headline, role, company, location, desc }
 }
 
+/** Work history from the LinkedIn result's title and every snippet, checked so places and schools never count as jobs. */
+function careerOf(c: Obj, p: ReturnType<typeof fromLinkedIn> | undefined, li: Obj | undefined, others: Obj[]) {
+  const text = [p?.desc, ...others.map((r) => plain(r.description))].filter(Boolean).join('. ')
+  const jobs = careerFromText(text, li?.url ?? others[0]?.url ?? '', c)
+  if (
+    p?.company &&
+    validEmployer(p.company, p.role) &&
+    !jobs.some((j) => j.company.toLowerCase() === p.company!.toLowerCase())
+  )
+    jobs.unshift({ company: p.company, ...(p.role ? { role: p.role } : {}), years: 'present', url: li!.url })
+  return jobs.length ? jobs.slice(0, 10) : undefined
+}
+
 function personWeb(c: Obj, results: Obj[]) {
   const at = new Date().toISOString()
   const name: string = c.fullName
@@ -109,10 +123,7 @@ function personWeb(c: Obj, results: Obj[]) {
       match: li ? 'confident' : 'likely',
       summary,
       location: p?.location,
-      career:
-        p?.role || p?.company
-          ? [{ company: p.company ?? c.company ?? 'Unknown company', role: p.role, years: 'present', url: li.url }]
-          : undefined,
+      career: careerOf(c, p, li, others),
       github,
       sources: [...(li ? [li.url] : []), ...others.map((r) => r.url)].slice(0, 8),
       note: 'From web search results (Brave): headline and pages that mention this person. No full work history.',
